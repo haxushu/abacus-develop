@@ -307,6 +307,7 @@ void Print_Info::print_screen(const int &stress_step, const int &force_step, con
 	{
         std::cout << " SELF-CONSISTENT : " << std::endl;
 		GlobalV::ofs_running << " SELF-CONSISTENT" << std::endl;
+		std::cout << " Eigensolver : " << GlobalV::KS_SOLVER  <<std::endl;
 	}
 	else if(GlobalV::CALCULATION=="nscf") //add 4 lines 2015-09-06, xiaohui
 	{

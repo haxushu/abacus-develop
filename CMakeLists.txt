@@ -14,6 +14,7 @@ project(ABACUS
 option(ENABLE_DEEPKS "Enable DeePKS functionality" OFF)
 option(ENABLE_LIBXC "Enable LibXC functionality" OFF)
 option(USE_CUDA "Enable support to CUDA." OFF)
+option(USE_CUSOLVER "Enable support to CUSOLVER." OFF)
 option(USE_ROCM "Enable support to ROCm." OFF)
 option(USE_OPENMP " Enable OpenMP in abacus." ON)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -72,6 +73,7 @@ else() # CUDA not found
     set(USE_CUDA OFF)
   endif()
 endif()
+
 if(USE_CUDA)
   set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_EXTENSIONS ON)
@@ -94,7 +96,11 @@ if(USE_CUDA)
   75 # T4
   )
   include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-  add_compile_definitions(__CUDA)
+  # add_compile_definitions(__CUDA)
+  set(USE_CUDA OFF)
+  set(USE_CUSOLVER ON)
+  add_compile_definitions(__CUSOLVER)
+  message(WARNING "USE_CUDA is set as ON, while USE_CUDA is set as OFF.\nOnly __CUSOLVER is defined, while __CUDA is not defined.")
 endif()
 
 # Warning: CMake add support to HIP in version 3.21. This is rather a new version.

@@ -91,6 +91,8 @@ void Local_Orbital_Charge::allocate_dm_wfc(const Grid_Technique &gt)
 		this->allocate_DM_k();
 	}
 
+        std::cout << "allocate_dm_wfc PASS >>>>!" << std::endl;
+
 	return;
 }
 
@@ -112,13 +114,13 @@ void Local_Orbital_Charge::sum_bands(void)
     } 
 
     //xiaohui add 2013-09-02
-    if(GlobalV::GAMMA_ONLY_LOCAL)
+    if(GlobalV::GAMMA_ONLY_LOCAL)   
     {
         if(GlobalV::KS_SOLVER=="selinv")
         {
             //density matrix has already been calcualted.
         }
-        else if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+        else if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
         {
             //LiuXh modify 2021-09-06, clear memory, cal_dk_gamma() not used for genelpa solver.
             //density matrix has already been calculated.
@@ -139,7 +141,7 @@ void Local_Orbital_Charge::sum_bands(void)
     {
         ModuleBase::GlobalFunc::NOTE("Calculate the density matrix.");
         this->cal_dk_k( GlobalC::GridT );
-        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")        // Peize Lin test 2019-05-15
+        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")        // Peize Lin test 2019-05-15
 		{
             wfc_dm_2d.cal_dm(GlobalC::wf.wg);
 		}

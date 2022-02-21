@@ -83,7 +83,7 @@ void Parallel_Orbitals::set_trace(void)
 	}
 #ifdef __MPI
     else if(GlobalV::KS_SOLVER=="scalpack" || GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="hpseps" 
-		|| GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx") //xiaohui add 2013-09-02
+		|| GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver") //xiaohui add 2013-09-02
     {
         // GlobalV::ofs_running << " nrow=" << nrow << std::endl;
         for (int irow=0; irow< this->nrow; irow++)

@@ -7,7 +7,8 @@
 #include "../src_io/wf_local.h"
 #include "../module_base/memory.h"
 #include "../module_base/timer.h"
-
+#include <chrono>
+#include <thread>
 
 #ifdef __MPI
 extern "C"
@@ -22,6 +23,9 @@ extern "C"
 #endif
 
 #include "../src_external/src_test/test_function.h"
+
+extern "C"
+int cusolver_DnDsygvd(int N, int M, double *A, double *B, double *W, double *V);
 
 inline int globalIndex(int localIndex, int nblk, int nprocs, int myproc)
 {
@@ -506,7 +510,7 @@ void Pdiag_Double::divide_HS_2d
 	this->nloc = MatrixInfo.col_num * MatrixInfo.row_num;
 
 	// init blacs context for genelpa
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
         blacs_ctxt=cart2blacs(comm_2D, dim0, dim1, GlobalV::NLOCAL, nb, nrow, desc);
     }
@@ -586,6 +590,7 @@ void Pdiag_Double::diago_double_begin(
 				ofs<<std::endl;
 			}
 		};
+		std::cout << "Matrix size:" << GlobalV::NLOCAL << std::endl;
 		print_matrix_F("H_gamma", h_mat);
 		print_matrix_F("S_gamma", s_mat);
 		print_matrix_C("H_gamma", h_mat);
@@ -595,6 +600,50 @@ void Pdiag_Double::diago_double_begin(
 	#endif
 
 #ifdef __MPI
+
+// {
+// 			static int istep = 0;
+// 		auto print_matrix_C = [&](const std::string &file_name, double*m)
+// 		{
+// 			std::ofstream ofs(file_name+"-C_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
+// 			for(int ic=0; ic<GlobalC::ParaO.ncol; ++ic)
+// 			{
+// 				for(int ir=0; ir<GlobalC::ParaO.nrow; ++ir)
+// 				{
+// 					const int index=ic*GlobalC::ParaO.nrow+ir;
+// 					if(abs(m[index])>1E-10)
+// 						ofs<<m[index]<<"\t";
+// 					else
+// 						ofs<<0<<"\t";
+// 				}
+// 				ofs<<std::endl;
+// 			}
+// 		};
+// 		auto print_matrix_F = [&](const std::string &file_name, double*m)
+// 		{
+// 			std::ofstream ofs(file_name+"-F_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
+// 			for(int ir=0; ir<GlobalC::ParaO.nrow; ++ir)
+// 			{
+// 				for(int ic=0; ic<GlobalC::ParaO.ncol; ++ic)
+// 				{
+// 					const int index=ic*GlobalC::ParaO.nrow+ir;
+// 					if(abs(m[index])>1E-10)
+// 						ofs<<m[index]<<"\t";
+// 					else
+// 						ofs<<0<<"\t";
+// 				}
+// 				ofs<<std::endl;
+// 			}
+// 		};
+// 		std::cout << "Matrix size:" << GlobalV::NLOCAL << std::endl;
+// 		print_matrix_F("H_gamma", h_mat);
+// 		print_matrix_F("S_gamma", s_mat);
+// 		print_matrix_C("H_gamma", h_mat);
+// 		print_matrix_C("S_gamma", s_mat);
+// 		++istep;
+// 	}
+
+
 	ModuleBase::TITLE("Pdiag_Double","diago_begin");
 	assert(this->loc_size > 0);
 	assert(GlobalV::NLOCAL > 0);
@@ -658,6 +707,7 @@ void Pdiag_Double::diago_double_begin(
 	}// HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
+		std::cout << "We are double_elpa here now!" << std::endl;   
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -866,14 +916,127 @@ void Pdiag_Double::diago_double_begin(
 	}
 	else if(GlobalV::KS_SOLVER=="scalapack_gvx")
 	{
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","scalapack_gvx_solve");
 		diag_scalapack_gvx.pdsygvx_diag(this->desc, this->ncol, this->nrow, h_mat, s_mat, ekb, wfc_2d);		// Peize Lin add 2021.11.02
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","scalapack_gvx_solve");
 
 		if(INPUT.new_dm==0)
 		{
 			throw std::domain_error("INPUT.new_dm must be 1. "+ModuleBase::GlobalFunc::TO_STRING(__FILE__)+" line "+ModuleBase::GlobalFunc::TO_STRING(__LINE__));
 		}
-	}
-    //delete[] Stmp; //LiuXh 20171109
+	} 	
+	else if(GlobalV::KS_SOLVER=="cusolver")
+	{
+		std::cout << "We are cusolver here now!" << std::endl;   
+		wfc_2d.create(this->ncol, this->nrow, false);
+		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		cusolver_DnDsygvd(this->ncol, this->nrow, h_mat, s_mat, ekb_tmp.data(), wfc_2d.c);
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
+
+		memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
+		// diag_scalapack_gvx.pdsygvx_diag(this->desc, this->ncol, this->nrow, h_mat, s_mat, ekb, wfc_2d);		// Peize Lin add 2021.11.02
+		
+
+		// convert wave function to band distribution
+			// and calculate the density matrix in the tranditional way
+			// redistribute eigenvectors to wfc / wfc_aug
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig");
+		int pos=0;
+		for(int i=0; i<myid; ++i)
+		{
+			pos+=loc_sizes[i];
+		}
+		int naroc[2]; // maximum number of row or column
+		double **ctot;
+
+
+		if(this->out_lowf && myid==0)    // ctot NBANDS * NLOCAL
+		{
+			ctot = new double*[GlobalV::NBANDS];
+			for (int i=0; i<GlobalV::NBANDS; i++)
+			{
+				ctot[i] = new double[GlobalV::NLOCAL];
+				ModuleBase::GlobalFunc::ZEROS(ctot[i], GlobalV::NLOCAL);
+			}
+			ModuleBase::Memory::record("Pdiag_Basic","ctot",GlobalV::NBANDS*GlobalV::NLOCAL,"double");
+		}
+
+
+		long maxnloc; // maximum number of elements in local matrix
+        MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
+        MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
+        double *work=new double[maxnloc]; // work/buffer matrix
+        int info;
+		for(int iprow=0; iprow<dim0; ++iprow)
+		{
+			for(int ipcol=0; ipcol<dim1; ++ipcol)
+			{
+				const int coord[2]={iprow, ipcol};
+				int src_rank;
+				MPI_Cart_rank(comm_2D, coord, &src_rank);
+				if(myid==src_rank)
+				{
+					BlasConnector::copy(nloc, wfc_2d.c, inc, work, inc);
+					naroc[0]=nrow;
+					naroc[1]=ncol;
+				}
+				info=MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
+				info=MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
+
+				if(out_lowf)
+				{
+					if(INPUT.new_dm==0)
+					{
+						// mohan delete Bfield option 2021-02-12
+						//info=q2ZLOC_WFC_WFCAUG_CTOT(myid, pos, naroc, nb,
+						//	dim0, dim1, iprow, ipcol, this->loc_size,
+						//	work, Z_LOC[ik], wfc, GlobalC::LOWF.WFC_GAMMA_aug[GlobalV::CURRENT_SPIN], ctot);
+					}
+					else
+					{
+						info=q2CTOT(myid, naroc, nb,
+							dim0, dim1, iprow, ipcol, this->loc_size,
+							work, ctot);
+					}
+				}//out_lowf
+				else
+				{
+					// mohan update 2021-02-12, delete Bfield option
+					//info=q2ZLOC_WFC_WFCAUG(pos, naroc, nb,
+					//	dim0, dim1, iprow, ipcol, this->loc_size,
+					//	work, Z_LOC[ik], wfc, GlobalC::LOWF.WFC_GAMMA_aug[GlobalV::CURRENT_SPIN]);
+				}
+			}//loop ipcol
+		}//loop iprow
+
+		if(out_lowf && myid==0)
+		{
+			std::stringstream ss;
+			ss << GlobalV::global_out_dir << "LOWF_GAMMA_S" << GlobalV::CURRENT_SPIN+1 << ".dat";
+			// mohan add 2012-04-03, because we need the occupations for the
+				// first iteration.
+			WF_Local::write_lowf( ss.str(), ctot );//mohan add 2010-09-09
+			for (int i=0; i<GlobalV::NBANDS; i++)
+			{
+				delete[] ctot[i];
+			}
+			delete[] ctot;
+		}
+
+		delete[] work;
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig");
+		    	
+
+		if(INPUT.new_dm==0)
+		{
+			throw std::domain_error("INPUT.new_dm must be 1. "+ModuleBase::GlobalFunc::TO_STRING(__FILE__)+" line "+ModuleBase::GlobalFunc::TO_STRING(__LINE__));
+		}  
+	} 
 #endif
 
 #ifdef TEST_DIAG
@@ -995,6 +1158,7 @@ void Pdiag_Double::diago_complex_begin(
 
 	if(GlobalV::KS_SOLVER=="hpseps")
 	{
+		std::cout << "We are here now!" << std::endl;    
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -1021,6 +1185,8 @@ void Pdiag_Double::diago_complex_begin(
 	} // HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
+				std::cout << "We are elpa_here now!" << std::endl;    
+
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
         long maxnloc; // maximum number of elements in local matrix

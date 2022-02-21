@@ -22,4 +22,11 @@ add_library(
     pzsteiz.cpp
     pzt2s.cpp
     diag_scalapack_gvx.cpp
+    diag_cusolver.cu
 )
+
+# if(USE_CUDA)
+#     list(APPEND objects
+#         diag_cusolver.cu
+#     )
+# endif()

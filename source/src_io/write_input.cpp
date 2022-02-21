@@ -72,7 +72,7 @@ void Input::Print(const std::string &fn)const
 	ModuleBase::GlobalFunc::OUTP(ofs,"cell_factor",cell_factor,"used in the construction of the pseudopotential tables");	
 	
 	ofs << "\n#Parameters (3.Relaxation)" << std::endl;
-	ModuleBase::GlobalFunc::OUTP(ofs,"ks_solver",GlobalV::KS_SOLVER,"cg; dav; lapack; genelpa; hpseps; scalapack_gvx");
+	ModuleBase::GlobalFunc::OUTP(ofs,"ks_solver",GlobalV::KS_SOLVER,"cg; dav; lapack; genelpa; hpseps; scalapack_gvx; cusolver");
 	ModuleBase::GlobalFunc::OUTP(ofs,"niter",niter,"#number of electron iterations");
 	ModuleBase::GlobalFunc::OUTP(ofs,"force_set",force_set,"output the force_set or not"); 
 	ModuleBase::GlobalFunc::OUTP(ofs,"nstep",nstep,"number of ion iteration steps");
@@ -106,7 +106,7 @@ void Input::Print(const std::string &fn)const
 	ofs << "\n#Parameters (4.LCAO)" << std::endl;
 	ModuleBase::GlobalFunc::OUTP(ofs,"basis_type",basis_type,"PW; LCAO in pw; LCAO");
 	ModuleBase::GlobalFunc::OUTP(ofs,"new_dm",new_dm,"Type of density matrix; 0: old 1: new");
-	if(ks_solver=="HPSEPS" || ks_solver=="genelpa" || ks_solver=="scalapack_gvx")
+	if(ks_solver=="HPSEPS" || ks_solver=="genelpa" || ks_solver=="scalapack_gvx" || ks_solver=="cusolver")
 	{
 		ModuleBase::GlobalFunc::OUTP(ofs,"nb2d",nb2d,"2d distribution of atoms");
 	}

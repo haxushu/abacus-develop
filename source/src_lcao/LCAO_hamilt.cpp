@@ -34,6 +34,7 @@ void LCAO_Hamilt::set_lcao_matrices(void)
 
     if(GlobalV::GAMMA_ONLY_LOCAL)
     {
+        std::cout << "TEST set_lcao_matrices >>>>!" << std::endl;
         // mohan add 2012-03-29
         // calculate the grid integration of 'Vl' matrix for gamma algorithms.
         this->GG.prepare(GlobalC::ucell.latvec, GlobalC::ucell.lat0);
@@ -487,7 +488,7 @@ void LCAO_Hamilt::calculate_STN_R(void)
                             if(nu<0)continue;
 
                             int iic;
-                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                             {
                                 iic=mu+nu*GlobalC::ParaO.nrow;
                             }
@@ -862,7 +863,7 @@ void LCAO_Hamilt::calculat_HR_dftu_sparse(const int &current_spin, const double 
                     for (auto &col_loop : row_loop.second)
                     {
                         ic = GlobalC::ParaO.trace_loc_col[col_loop.first];
-                        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                         {
                             iic = ir + ic * GlobalC::ParaO.nrow;
                         }
@@ -887,7 +888,7 @@ void LCAO_Hamilt::calculat_HR_dftu_sparse(const int &current_spin, const double 
                         ic = GlobalC::ParaO.trace_loc_col[j];
                         if (ic >= 0)
                         {
-                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                             {
                                 iic = ir + ic * GlobalC::ParaO.nrow;
                             }
@@ -974,7 +975,7 @@ void LCAO_Hamilt::calculat_HR_dftu_soc_sparse(const int &current_spin, const dou
                     for (auto &col_loop : row_loop.second)
                     {
                         ic = GlobalC::ParaO.trace_loc_col[col_loop.first];
-                        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                        if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                         {
                             iic = ir + ic * GlobalC::ParaO.nrow;
                         }
@@ -999,7 +1000,7 @@ void LCAO_Hamilt::calculat_HR_dftu_soc_sparse(const int &current_spin, const dou
                         ic = GlobalC::ParaO.trace_loc_col[j];
                         if (ic >= 0)
                         {
-                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                             {
                                 iic = ir + ic * GlobalC::ParaO.nrow;
                             }
@@ -1075,12 +1076,12 @@ void LCAO_Hamilt::calculate_HR_exx_sparse(const int &current_spin, const double 
 
 		for(int iwt1_local=0; iwt1_local<HexxR.nr; ++iwt1_local)
 		{
-			const int iwt1_global = (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+			const int iwt1_global = (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
 				? GlobalC::ParaO.MatrixInfo.col_set[iwt1_local]
 				: GlobalC::ParaO.MatrixInfo.row_set[iwt1_local];
 			for(int iwt2_local=0; iwt2_local<HexxR.nc; ++iwt2_local)
 			{
-				const int iwt2_global = (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+				const int iwt2_global = (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
 					? GlobalC::ParaO.MatrixInfo.row_set[iwt2_local]
 					: GlobalC::ParaO.MatrixInfo.col_set[iwt2_local];
 				if(std::abs(HexxR(iwt1_local,iwt2_local)) > sparse_threshold)

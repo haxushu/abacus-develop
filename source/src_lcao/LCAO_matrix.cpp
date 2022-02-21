@@ -21,7 +21,7 @@ void LCAO_Matrix::divide_HS_in_frag(const bool isGamma, Parallel_Orbitals &po)
     
     // (1) calculate nrow, ncol, nloc.
     if (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="hpseps" || GlobalV::KS_SOLVER=="scalpack" 
-        || GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx")
+        || GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
         GlobalV::ofs_running << " divide the H&S matrix using 2D block algorithms." << std::endl;
 #ifdef __MPI
@@ -176,9 +176,9 @@ void LCAO_Matrix::set_HSgamma(
     long index=0;
 
     // save the matrix as column major format
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
-        index=ic*GlobalC::ParaO.nrow+ir;
+        index=ic*GlobalC::ParaO.nrow+ir;               
     }
     else
     {
@@ -227,7 +227,7 @@ void LCAO_Matrix::set_HSk(const int &iw1_all, const int &iw2_all, const std::com
     const int ic = GlobalC::ParaO.trace_loc_col[ iw2_all ];
     //const int index = ir * GlobalC::ParaO.ncol + ic;
     long index;
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
     {
         index=ic*GlobalC::ParaO.nrow+ir;
     }
@@ -838,7 +838,7 @@ void LCAO_Matrix::set_HR_tr(const int &Rx, const int &Ry, const int &Rz, const i
 //std::cout<<"ir: "<<ir<<std::endl;
 //std::cout<<"ic: "<<ic<<std::endl;
     long index;
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
         index=ic*GlobalC::ParaO.nrow+ir;
 //std::cout<<"index: "<<index<<std::endl;
@@ -873,7 +873,7 @@ void LCAO_Matrix::set_HR_tr_soc(const int &Rx, const int &Ry, const int &Rz, con
 //std::cout<<"ir: "<<ir<<std::endl;
 //std::cout<<"ic: "<<ic<<std::endl;
     long index;
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
         index=ic*GlobalC::ParaO.nrow+ir;
 //std::cout<<"index: "<<index<<std::endl;

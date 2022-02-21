@@ -2697,6 +2697,15 @@ void Input::Check(void)
 			{
 				ModuleBase::WARNING_QUIT("Input","not ready for linear_scaling method in lcao .");
 			}
+			else if (ks_solver == "cusolver")
+			{
+				
+#ifdef __MPI
+				GlobalV::ofs_warning << "cusolver is under testing" << std::endl;
+#else
+				ModuleBase::WARNING_QUIT("Input","cusolver can not be used for series version.");
+#endif
+            }
 			else
 			{
 				ModuleBase::WARNING_QUIT("Input","please check the ks_solver parameter!");
@@ -2922,7 +2931,7 @@ void Input::Check(void)
 			if( !(calculation=="nscf") )
 				ModuleBase::WARNING_QUIT("Input","calculate berry phase, please set calculation = nscf");
 		}
-		else if(basis_type == "lcao" && (ks_solver == "genelpa" || ks_solver == "scalapack_gvx"))
+		else if(basis_type == "lcao" && (ks_solver == "genelpa" || ks_solver == "scalapack_gvx" || ks_solver == "cusolver"))
 		{
 			if( !(calculation=="nscf") )
 				ModuleBase::WARNING_QUIT("Input","calculate berry phase, please set calculation = nscf");

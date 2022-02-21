@@ -44,12 +44,10 @@ int Local_Orbital_Charge::setAlltoallvParameter(MPI_Comm comm_2D, int blacs_ctxt
     int myprow=0;
 	int mypcol=0;
 	int myproc=0;
-
+    
     Cblacs_gridinfo(blacs_ctxt, &nprows, &npcols, &myprow, &mypcol);
-
     Cblacs_pinfo(&myproc, &nprocs);
     // ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"nprocs",nprocs);
-
 
     // init data arrays
     delete[] sender_size_process;
