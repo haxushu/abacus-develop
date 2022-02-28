@@ -1,5 +1,11 @@
 add_subdirectory(MRRR)
 
+if(USE_CUSOLVER)
+    list(APPEND objects
+        diag_cusolver.cu
+    )
+endif()
+
 add_library(
     pdiag
     OBJECT
@@ -22,11 +28,6 @@ add_library(
     pzsteiz.cpp
     pzt2s.cpp
     diag_scalapack_gvx.cpp
-    diag_cusolver.cu
+    ${objects}
 )
 
-# if(USE_CUDA)
-#     list(APPEND objects
-#         diag_cusolver.cu
-#     )
-# endif()

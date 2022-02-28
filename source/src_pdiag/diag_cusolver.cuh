@@ -4,13 +4,10 @@
 #include <time.h>
 #include <iostream>
 #include <fstream>
-
-#ifdef __CUSOLVER
-// #include "cufft.h"
-// #include "cublas_v2.h"
-#include <cuda_runtime.h>
-#include <cusolverDn.h>
-#endif 
+#include <complex>
 
 extern "C"
 int cusolver_DnDsygvd(int N, int M, double *A, double *B, double *W, double *V);
+
+extern "C"
+int cusolver_DnZhegvd(int N, int M, std::complex<double>  *A, std::complex<double>  *B, double *W, std::complex<double>  *V);

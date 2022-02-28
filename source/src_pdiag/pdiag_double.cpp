@@ -9,6 +9,8 @@
 #include "../module_base/timer.h"
 #include <chrono>
 #include <thread>
+#define NOW() std::chrono::system_clock::now()
+#define ELAPSE(x) std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - x).count()/(double)1000.0
 
 #ifdef __MPI
 extern "C"
@@ -26,6 +28,9 @@ extern "C"
 
 extern "C"
 int cusolver_DnDsygvd(int N, int M, double *A, double *B, double *W, double *V);
+
+extern "C"
+int cusolver_DnZhegvd(int N, int M, std::complex<double>  *A, std::complex<double>  *B, double *W, std::complex<double>  *V);
 
 inline int globalIndex(int localIndex, int nblk, int nprocs, int myproc)
 {
@@ -510,7 +515,7 @@ void Pdiag_Double::divide_HS_2d
 	this->nloc = MatrixInfo.col_num * MatrixInfo.row_num;
 
 	// init blacs context for genelpa
-    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
+    if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" )   //|| GlobalV::KS_SOLVER=="cusolver"
     {
         blacs_ctxt=cart2blacs(comm_2D, dim0, dim1, GlobalV::NLOCAL, nb, nrow, desc);
     }
@@ -707,7 +712,7 @@ void Pdiag_Double::diago_double_begin(
 	}// HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
-		std::cout << "We are double_elpa here now!" << std::endl;   
+		std::cout << "We are double elpa here now!" << std::endl;   
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -738,8 +743,10 @@ void Pdiag_Double::diago_double_begin(
         }
 
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
+		auto elpa_start = NOW();
         int elpa_error;
         elpa_generalized_eigenvectors_d(handle, h_mat, Stmp, eigen, wfc_2d.c, is_already_decomposed, &elpa_error);
+		std::cout << "double elpa cost: " << ELAPSE(elpa_start) << std::endl;
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
 
     	ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by genelpa2");
@@ -927,12 +934,15 @@ void Pdiag_Double::diago_double_begin(
 	} 	
 	else if(GlobalV::KS_SOLVER=="cusolver")
 	{
-		std::cout << "We are cusolver here now!" << std::endl;   
+		std::cout << "We are double cusolver here now!" << std::endl;   
 		wfc_2d.create(this->ncol, this->nrow, false);
 		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
 
+		std::cout << "ncol = " << GlobalC::ParaO.ncol << " nrow " << GlobalC::ParaO.nrow << std::endl;
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		auto cs_start = NOW();
 		cusolver_DnDsygvd(this->ncol, this->nrow, h_mat, s_mat, ekb_tmp.data(), wfc_2d.c);
+		std::cout << "double cusolver cost: " << ELAPSE(cs_start) << std::endl;
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
 
@@ -1158,7 +1168,7 @@ void Pdiag_Double::diago_complex_begin(
 
 	if(GlobalV::KS_SOLVER=="hpseps")
 	{
-		std::cout << "We are here now!" << std::endl;    
+		std::cout << "We are complex hpseps here now!" << std::endl;    
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -1185,7 +1195,7 @@ void Pdiag_Double::diago_complex_begin(
 	} // HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
-				std::cout << "We are elpa_here now!" << std::endl;    
+		std::cout << "We are complex elpa here now!" << std::endl;    
 
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
@@ -1205,10 +1215,12 @@ void Pdiag_Double::diago_complex_begin(
         BlasConnector::copy(nloc, cs_mat, inc, Stmp, inc);
 
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
+		auto elpa_start = NOW();
         int elpa_derror;
         elpa_generalized_eigenvectors_dc(handle, reinterpret_cast<double _Complex*>(ch_mat),
                                          reinterpret_cast<double _Complex*>(Stmp),
                                          eigen, reinterpret_cast<double _Complex*>(wfc_2d.c), 0, &elpa_derror);
+		std::cout << "complex elpa cost: " << ELAPSE(elpa_start) << std::endl;
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
 
         // the eigenvalues.
@@ -1356,6 +1368,91 @@ void Pdiag_Double::diago_complex_begin(
 			delete[] work;
 			ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig_complex");
 		}
+	} if(GlobalV::KS_SOLVER=="cusolver")
+	{
+		std::cout << "We are complex cusolver here now!" << std::endl;   
+		wfc_2d.create(this->ncol, this->nrow, false);
+		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_hegvd_solve");
+		cusolver_DnZhegvd(this->ncol, this->nrow, ch_mat, cs_mat, ekb_tmp.data(), wfc_2d.c);
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_hegvd_solve");
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
+
+		memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
+		// diag_scalapack_gvx.pdsygvx_diag(this->desc, this->ncol, this->nrow, h_mat, s_mat, ekb, wfc_2d);		// Peize Lin add 2021.11.02
+		
+
+		// convert wave function to band distribution
+			// and calculate the density matrix in the tranditional way
+			// redistribute eigenvectors to wfc / wfc_aug
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig_complex");
+		long maxnloc; // maximum number of elements in local matrix
+        MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
+        MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
+        std::complex<double> *work=new std::complex<double>[maxnloc]; // work/buffer matrix
+        int naroc[2]; // maximum number of row or column
+        int info;
+        for(int iprow=0; iprow<dim0; ++iprow)
+        {
+            for(int ipcol=0; ipcol<dim1; ++ipcol)
+            {
+                const int coord[2]={iprow, ipcol};
+                int src_rank;
+                MPI_Cart_rank(comm_2D, coord, &src_rank);
+                if(myid==src_rank)
+                {
+                    BlasConnector::copy(nloc, wfc_2d.c, inc, work, inc);
+                    naroc[0]=nrow;
+                    naroc[1]=ncol;
+                }
+                info=MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
+                info=MPI_Bcast(work, maxnloc, MPI_DOUBLE_COMPLEX, src_rank, comm_2D);
+
+                if(this->out_lowf)
+                {
+                    std::complex<double> **ctot;
+                    if(myid==0)
+                    {
+                        ctot = new std::complex<double>*[GlobalV::NBANDS];
+                        for (int i=0; i<GlobalV::NBANDS; i++)
+                        {
+                            ctot[i] = new std::complex<double>[GlobalV::NLOCAL];
+                            ModuleBase::GlobalFunc::ZEROS(ctot[i], GlobalV::NLOCAL);
+                        }
+                        ModuleBase::Memory::record("Pdiag_Basic","ctot",GlobalV::NBANDS*GlobalV::NLOCAL,"cdouble");
+                    }
+					// mohan update 2021-02-12, delete BFIELD option
+					info=q2WFC_WFCAUG_CTOT_complex(myid, naroc, nb,
+							dim0, dim1, iprow, ipcol,
+							work, wfc, GlobalC::LOWF.WFC_K_aug[ik], ctot);
+                    std::stringstream ss;
+	                ss << GlobalV::global_out_dir << "LOWF_K_" << ik+1 << ".dat";
+                    // mohan add 2012-04-03, because we need the occupations for the
+                    // first iteration.
+                    WF_Local::write_lowf_complex( ss.str(), ctot, ik );//mohan add 2010-09-09
+                    if(myid==0)
+                    {
+                        for (int i=0; i<GlobalV::NBANDS; i++)
+                        {
+                            delete[] ctot[i];
+                        }
+                        delete[] ctot;
+                    }
+                }
+                else
+                {
+					// mohan update 2021-02-12, delte BFIELD option
+					info=q2WFC_WFCAUG_complex(naroc, nb,
+							dim0, dim1, iprow, ipcol,
+							work, wfc, GlobalC::LOWF.WFC_K_aug[ik]);
+				}
+            }
+        }
+        delete[] work;
+        ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig_complex");
 	}
 
 #endif

@@ -21,7 +21,7 @@ void LCAO_Matrix::divide_HS_in_frag(const bool isGamma, Parallel_Orbitals &po)
     
     // (1) calculate nrow, ncol, nloc.
     if (GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="hpseps" || GlobalV::KS_SOLVER=="scalpack" 
-        || GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
+        || GlobalV::KS_SOLVER=="selinv" || GlobalV::KS_SOLVER=="scalapack_gvx" )     //|| GlobalV::KS_SOLVER=="cusolver"
     {
         GlobalV::ofs_running << " divide the H&S matrix using 2D block algorithms." << std::endl;
 #ifdef __MPI
