@@ -2,7 +2,11 @@ add_subdirectory(MRRR)
 
 if(USE_CUSOLVER)
     list(APPEND objects
-        diag_cusolver.cu
+        pdiag_double.cu
+    )
+else()
+    list(APPEND objects
+    pdiag_double.cpp
     )
 endif()
 
@@ -12,7 +16,7 @@ add_library(
     pdgseps.cpp
     pdiag_basic.cpp
     pdiag_common.cpp
-    pdiag_double.cpp
+    ${objects}
     pdst2g.cpp
     pdstebz.cpp
     pdsteiz.cpp
@@ -28,6 +32,5 @@ add_library(
     pzsteiz.cpp
     pzt2s.cpp
     diag_scalapack_gvx.cpp
-    ${objects}
 )
 

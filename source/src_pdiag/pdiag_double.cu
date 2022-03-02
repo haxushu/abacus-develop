@@ -1,6 +1,5 @@
 /*test generalized Stardand double precision symmetric eigenproblem*/
 #include "pdiag_double.h"
-#include "diag_cusolver.h"
 #include "../module_base/lapack_connector.h"
 #include "../src_pw/occupy.h"
 #include "../src_pw/global.h"
@@ -27,11 +26,6 @@ extern "C"
 
 #include "../src_external/src_test/test_function.h"
 
-extern "C"
-int cusolver_DnDsygvd(int N, int M, double *A, double *B, double *W, double *V);
-
-extern "C"
-int cusolver_DnZhegvd(int N, int M, std::complex<double>  *A, std::complex<double>  *B, double *W, std::complex<double>  *V);
 
 inline int globalIndex(int localIndex, int nblk, int nprocs, int myproc)
 {
@@ -969,14 +963,11 @@ void Pdiag_Double::diago_double_begin(
 		wfc_2d.create(this->ncol, this->nrow, false);
 		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
 
-ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_H");
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
 
-		int naroc[2]; // maximum number of row or column
 		double *htot, *stot, *vtot;
-
 		vtot = new double[GlobalV::NLOCAL * GlobalV::NLOCAL];
 		ModuleBase::Memory::record("Pdiag_Basic","vtot",GlobalV::NLOCAL*GlobalV::NLOCAL,"double");
-
 		if(myid==0)    // htot  NLOCAL * NLOCAL
 		{
 			htot = new double[GlobalV::NLOCAL * GlobalV::NLOCAL];
@@ -986,262 +977,41 @@ ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_H");
 			ModuleBase::Memory::record("Pdiag_Basic","stot",GlobalV::NLOCAL*GlobalV::NLOCAL,"double");
 		}
 
-
 		long maxnloc; // maximum number of elements in local matrix
         MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
         MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
-        double *work=new double[maxnloc]; // work/buffer matrix
-        int info;
+        
+		cuGather_double(maxnloc, h_mat, htot);
+		cuGather_double(maxnloc, s_mat, stot);
 
-		for(int iprow=0; iprow<dim0; ++iprow)
-		{
-			for(int ipcol=0; ipcol<dim1; ++ipcol)
-			{
-				const int coord[2]={iprow, ipcol};
-				int src_rank;
-				MPI_Cart_rank(comm_2D, coord, &src_rank);
-				if(myid==src_rank)
-				{
-					BlasConnector::copy(nloc, h_mat, inc, work, inc);
-					naroc[0]=nrow;
-					naroc[1]=ncol;
-				}
-				info=MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
-				info=MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
-
-	
-				for(int j=0; j<naroc[1]; ++j)
-				{
-					int igcol=globalIndex(j, nb, dim1, ipcol);
-					for(int i=0; i<naroc[0]; ++i)
-					{
-						int igrow=globalIndex(i, nb, dim0, iprow);
-						if(myid==0) htot[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
-					}
-				}
-			}//loop ipcol
-		}//loop iprow
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
 
 
-		for(int iprow=0; iprow<dim0; ++iprow)
-		{
-			for(int ipcol=0; ipcol<dim1; ++ipcol)
-			{
-				const int coord[2]={iprow, ipcol};
-				int src_rank;
-				MPI_Cart_rank(comm_2D, coord, &src_rank);
-				if(myid==src_rank)
-				{
-					BlasConnector::copy(nloc, s_mat, inc, work, inc);
-					naroc[0]=nrow;
-					naroc[1]=ncol;
-				}
-				info=MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
-				info=MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
-
-	
-				for(int j=0; j<naroc[1]; ++j)
-				{
-					int igcol=globalIndex(j, nb, dim1, ipcol);
-					for(int i=0; i<naroc[0]; ++i)
-					{
-						int igrow=globalIndex(i, nb, dim0, iprow);
-						if(myid==0) stot[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
-					}
-				}
-			}//loop ipcol
-		}//loop iprow
-
-		// if(myid==0)
-		// {
-		// 			{
-		// 		static int istep = 0;
-		// 				auto print_matrix_F = [&](const std::string &file_name, double*m)
-		// 		{
-		// 			std::ofstream ofs(file_name+"-F_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
-		// 			for(int ir=0; ir<GlobalV::NLOCAL; ++ir)
-		// 			{
-		// 				for(int ic=0; ic<GlobalV::NLOCAL; ++ic)
-		// 				{
-		// 					const int index=ic*GlobalV::NLOCAL+ir;
-		// 					if(abs(m[index])>1E-10)
-		// 						ofs<<m[index]<<"\t";
-		// 					else
-		// 						ofs<<0<<"\t";
-		// 				}
-		// 				ofs<<std::endl;
-		// 			}
-		// 		};
-		// 		print_matrix_F("htot", htot);
-		// 		print_matrix_F("stot", stot);
-
-		// 		istep++;
-		// 		}
-
-
-		// }
-
-		delete[] work;
-		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_H");
-
-
-
-
-
-
-		std::cout << "ncol = " << GlobalC::ParaO.ncol << " nrow " << GlobalC::ParaO.nrow << std::endl;
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+
 		if (myid == 0){
-					auto cs_start = NOW();
-			// cusolver_DnDsygvd(this->ncol, this->nrow, h_mat, s_mat, ekb_tmp.data(), wfc_2d.c);
-					cusolver_DnDsygvd(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
-					for (int i = 0; i < GlobalV::NLOCAL; i++){
-						std::cout << ekb_tmp[i] << std::endl;
-					}
+
+			if(ifElpaHandle(GlobalC::CHR.get_new_e_iteration(), (GlobalV::CALCULATION=="nscf"))){
+				diag_cusolver_gvd.init_double(GlobalV::NLOCAL);
+        	}
+
+			auto cs_start = NOW();
+
+			diag_cusolver_gvd.Dngvd_double(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
 			
-			{
-			static int istep = 0;
-					auto print_matrix_F = [&](const std::string &file_name, double*m)
-			{
-				std::ofstream ofs(file_name+"-F_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
-				for(int ir=0; ir<GlobalV::NLOCAL; ++ir)
-				{
-					for(int ic=0; ic<GlobalV::NLOCAL; ++ic)
-					{
-						const int index=ic*GlobalV::NLOCAL+ir;
-						if(abs(m[index])>1E-10)
-							ofs<<m[index]<<"\t";
-						else
-							ofs<<0<<"\t";
-					}
-					ofs<<std::endl;
-				}
-			};
-			print_matrix_F("vtot", vtot);
-			istep++;
-			}
 			std::cout << "double cusolver cost: " << ELAPSE(cs_start) << std::endl;
 		}
-			ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
-			ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
 
-			
-			memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
-			info=MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, comm_2D);
-			ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
 
+		if (myid == 0)	memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, comm_2D);
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
 
+		
 			// memcpy( wfc_2d.c,vtot, sizeof(double)*GlobalV::NLOCAL*GlobalV::NLOCAL );
-
-			info=MPI_Bcast(vtot, GlobalV::NLOCAL*GlobalV::NLOCAL, MPI_DOUBLE, 0, comm_2D);
-			for(int iprow=0; iprow<dim0; ++iprow){
-				for(int ipcol=0; ipcol<dim1; ++ipcol){
-					const int coord[2]={iprow, ipcol};
-					int src_rank;
-					MPI_Cart_rank(comm_2D, coord, &src_rank);
-					if (src_rank != myid) continue;
-					for(int j=0; j<ncol; ++j)
-					{
-						int igcol=globalIndex(j, nb, dim1, ipcol);
-						for(int i=0; i<nrow; ++i)
-						{
-							int igrow=globalIndex(i, nb, dim0, iprow);
-							wfc_2d.c[j*nrow+i] = vtot[igcol*GlobalV::NLOCAL + igrow];
-							// if(myid==0) stot[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
-						}
-					}
-				}//loop ipcol
-			}//loop iprow
-
-		// convert wave function to band distribution
-			// and calculate the density matrix in the tranditional way
-			// redistribute eigenvectors to wfc / wfc_aug
-
-		// ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig");
-		// int pos=0;
-		// for(int i=0; i<myid; ++i)
-		// {
-		// 	pos+=loc_sizes[i];
-		// }
-		// int naroc[2]; // maximum number of row or column
-		// double **ctot;
-
-
-		// if(this->out_lowf && myid==0)    // ctot NBANDS * NLOCAL
-		// {
-		// 	ctot = new double*[GlobalV::NBANDS];
-		// 	for (int i=0; i<GlobalV::NBANDS; i++)
-		// 	{
-		// 		ctot[i] = new double[GlobalV::NLOCAL];
-		// 		ModuleBase::GlobalFunc::ZEROS(ctot[i], GlobalV::NLOCAL);
-		// 	}
-		// 	ModuleBase::Memory::record("Pdiag_Basic","ctot",GlobalV::NBANDS*GlobalV::NLOCAL,"double");
-		// }
-
-
-		// long maxnloc; // maximum number of elements in local matrix
-        // MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
-        // MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
-        // double *work=new double[maxnloc]; // work/buffer matrix
-        // int info;
-		// for(int iprow=0; iprow<dim0; ++iprow)
-		// {
-		// 	for(int ipcol=0; ipcol<dim1; ++ipcol)
-		// 	{
-		// 		const int coord[2]={iprow, ipcol};
-		// 		int src_rank;
-		// 		MPI_Cart_rank(comm_2D, coord, &src_rank);
-		// 		if(myid==src_rank)
-		// 		{
-		// 			BlasConnector::copy(nloc, wfc_2d.c, inc, work, inc);
-		// 			naroc[0]=nrow;
-		// 			naroc[1]=ncol;
-		// 		}
-		// 		info=MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
-		// 		info=MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
-
-		// 		if(out_lowf)
-		// 		{
-		// 			if(INPUT.new_dm==0)
-		// 			{
-		// 				// mohan delete Bfield option 2021-02-12
-		// 				//info=q2ZLOC_WFC_WFCAUG_CTOT(myid, pos, naroc, nb,
-		// 				//	dim0, dim1, iprow, ipcol, this->loc_size,
-		// 				//	work, Z_LOC[ik], wfc, GlobalC::LOWF.WFC_GAMMA_aug[GlobalV::CURRENT_SPIN], ctot);
-		// 			}
-		// 			else
-		// 			{
-		// 				info=q2CTOT(myid, naroc, nb,
-		// 					dim0, dim1, iprow, ipcol, this->loc_size,
-		// 					work, ctot);
-		// 			}
-		// 		}//out_lowf
-		// 		else
-		// 		{
-		// 			// mohan update 2021-02-12, delete Bfield option
-		// 			//info=q2ZLOC_WFC_WFCAUG(pos, naroc, nb,
-		// 			//	dim0, dim1, iprow, ipcol, this->loc_size,
-		// 			//	work, Z_LOC[ik], wfc, GlobalC::LOWF.WFC_GAMMA_aug[GlobalV::CURRENT_SPIN]);
-		// 		}
-		// 	}//loop ipcol
-		// }//loop iprow
-
-		// if(out_lowf && myid==0)
-		// {
-		// 	std::stringstream ss;
-		// 	ss << GlobalV::global_out_dir << "LOWF_GAMMA_S" << GlobalV::CURRENT_SPIN+1 << ".dat";
-		// 	// mohan add 2012-04-03, because we need the occupations for the
-		// 		// first iteration.
-		// 	WF_Local::write_lowf( ss.str(), ctot );//mohan add 2010-09-09
-		// 	for (int i=0; i<GlobalV::NBANDS; i++)
-		// 	{
-		// 		delete[] ctot[i];
-		// 	}
-		// 	delete[] ctot;
-		// }
-
-		// delete[] work;
-		// ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig");
+		cuDivide_double(vtot, wfc_2d.c);
 		    	
 		if (myid == 0){
 			delete[] htot;
@@ -1577,28 +1347,71 @@ void Pdiag_Double::diago_complex_begin(
 		}
 	} if(GlobalV::KS_SOLVER=="cusolver")
 	{
+
 		std::cout << "We are complex cusolver here now!" << std::endl;   
+
 		wfc_2d.create(this->ncol, this->nrow, false);
 		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
 
-		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_hegvd_solve");
-		cusolver_DnZhegvd(this->ncol, this->nrow, ch_mat, cs_mat, ekb_tmp.data(), wfc_2d.c);
-		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_hegvd_solve");
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+
+		std::complex<double> *htot, *stot, *vtot;
+		vtot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+		ModuleBase::Memory::record("Pdiag_Basic","vtot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+		if(myid==0)    // htot  NLOCAL * NLOCAL
+		{
+			htot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","htot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+
+			stot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","stot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+		}
+
+		long maxnloc; // maximum number of elements in local matrix
+        MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
+        MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
+        
+		cuGather_complex(maxnloc, ch_mat, htot);
+		cuGather_complex(maxnloc, cs_mat, stot);
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+
+		if (myid == 0){
+
+			if(ifElpaHandle(GlobalC::CHR.get_new_e_iteration(), (GlobalV::CALCULATION=="nscf"))){
+				diag_cusolver_gvd.init_complex(GlobalV::NLOCAL);
+        	}
+
+			auto cs_start = NOW();
+
+			diag_cusolver_gvd.Dngvd_complex(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
+			
+			std::cout << "complex cusolver cost: " << ELAPSE(cs_start) << std::endl;
+		}
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
 
-		memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		if (myid == 0)	memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, comm_2D);
 		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
-		// diag_scalapack_gvx.pdsygvx_diag(this->desc, this->ncol, this->nrow, h_mat, s_mat, ekb, wfc_2d);		// Peize Lin add 2021.11.02
-		
+
+		cuDivide_complex(vtot, wfc_2d.c);
+		    	
+		if (myid == 0){
+			delete[] htot;
+			delete[] stot;
+		}
+		delete[] vtot;
 
 		// convert wave function to band distribution
 			// and calculate the density matrix in the tranditional way
 			// redistribute eigenvectors to wfc / wfc_aug
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_eig_complex");
-		long maxnloc; // maximum number of elements in local matrix
-        MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
-        MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
         std::complex<double> *work=new std::complex<double>[maxnloc]; // work/buffer matrix
         int naroc[2]; // maximum number of row or column
         int info;
@@ -1742,3 +1555,443 @@ void Pdiag_Double::readin(
     delete[] Z;
 }
 #endif
+
+
+void Pdiag_Double::cuGather_double(const long maxnloc, double *mat_loc, double *mat_glb){
+    int myid;
+    MPI_Comm_rank(comm_2D, &myid);
+    int naroc[2]; 
+    double *work=new double[maxnloc]; // work/buffer matrix
+
+    for(int iprow=0; iprow<dim0; ++iprow)
+    {
+        for(int ipcol=0; ipcol<dim1; ++ipcol)
+        {
+            const int coord[2]={iprow, ipcol};
+            int src_rank;
+            MPI_Cart_rank(comm_2D, coord, &src_rank);
+            if(myid==src_rank)
+            {
+                BlasConnector::copy(nloc, mat_loc, 1, work, 1);
+                naroc[0]=nrow;
+                naroc[1]=ncol;
+            }
+            MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
+            MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
+
+
+            for(int j=0; j<naroc[1]; ++j)
+            {
+                int igcol=globalIndex(j, nb, dim1, ipcol);
+                for(int i=0; i<naroc[0]; ++i)
+                {
+                    int igrow=globalIndex(i, nb, dim0, iprow);
+                    if (myid == 0) mat_glb[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
+                }
+            }
+        }
+    }
+
+    delete[] work;   
+}
+
+void Pdiag_Double::cuGather_complex(const long maxnloc, std::complex<double> *mat_loc, std::complex<double> *mat_glb){
+    int myid;
+    MPI_Comm_rank(comm_2D, &myid);
+    int naroc[2]; 
+    std::complex<double> *work=new std::complex<double>[maxnloc]; // work/buffer matrix
+    
+    for(int iprow=0; iprow<dim0; ++iprow)
+    {
+        for(int ipcol=0; ipcol<dim1; ++ipcol)
+        {
+            const int coord[2]={iprow, ipcol};
+            int src_rank;
+            MPI_Cart_rank(comm_2D, coord, &src_rank);
+            if(myid==src_rank)
+            {
+                BlasConnector::copy(nloc, mat_loc, 1, work, 1);
+                naroc[0]=nrow;
+                naroc[1]=ncol;
+            }
+            MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
+            MPI_Bcast(work, maxnloc, MPI_DOUBLE_COMPLEX, src_rank, comm_2D);
+
+
+            for(int j=0; j<naroc[1]; ++j)
+            {
+                int igcol=globalIndex(j, nb, dim1, ipcol);
+                for(int i=0; i<naroc[0]; ++i)
+                {
+                    int igrow=globalIndex(i, nb, dim0, iprow);
+                    if (myid == 0) mat_glb[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
+                }
+            }
+        }
+    }
+
+    delete[] work;   
+}
+
+void Pdiag_Double::cuDivide_double(double *mat_glb, double *mat_loc){
+    int myid;
+    MPI_Comm_rank(comm_2D, &myid);
+    MPI_Bcast(mat_glb, GlobalV::NLOCAL*GlobalV::NLOCAL, MPI_DOUBLE, 0, comm_2D);
+    for(int iprow=0; iprow<dim0; ++iprow){
+        for(int ipcol=0; ipcol<dim1; ++ipcol){
+            const int coord[2]={iprow, ipcol};
+            int src_rank;
+            MPI_Cart_rank(comm_2D, coord, &src_rank);
+            if (src_rank != myid) continue;
+            for(int j=0; j<ncol; ++j)
+            {
+                int igcol=globalIndex(j, nb, dim1, ipcol);
+                for(int i=0; i<nrow; ++i)
+                {
+                    int igrow=globalIndex(i, nb, dim0, iprow);
+                    mat_loc[j*nrow+i] = mat_glb[igcol*GlobalV::NLOCAL + igrow];
+                }
+            }
+        }//loop ipcol
+    }//loop iprow
+}
+
+void Pdiag_Double::cuDivide_complex(std::complex<double> *mat_glb, std::complex<double> *mat_loc){
+    int myid;
+    MPI_Comm_rank(comm_2D, &myid);
+    MPI_Bcast(mat_glb, GlobalV::NLOCAL*GlobalV::NLOCAL, MPI_DOUBLE_COMPLEX, 0, comm_2D);
+    for(int iprow=0; iprow<dim0; ++iprow){
+        for(int ipcol=0; ipcol<dim1; ++ipcol){
+            const int coord[2]={iprow, ipcol};
+            int src_rank;
+            MPI_Cart_rank(comm_2D, coord, &src_rank);
+            if (src_rank != myid) continue;
+            for(int j=0; j<ncol; ++j)
+            {
+                int igcol=globalIndex(j, nb, dim1, ipcol);
+                for(int i=0; i<nrow; ++i)
+                {
+                    int igrow=globalIndex(i, nb, dim0, iprow);
+                    mat_loc[j*nrow+i] = mat_glb[igcol*GlobalV::NLOCAL + igrow];
+                }
+            }
+        }//loop ipcol
+    }//loop iprow
+}
+
+
+template<typename T>
+void Diag_cuSolver_gvd::printMatrix(int m, int n, T *A, int lda, const char* name)
+    {
+        for(int row = 0 ; row < m ; row++){        // row dominant  
+            for(int col = 0 ; col < n ; col++){
+                T Areg = A[row + col*lda];
+                printf("%s(%d,%d) = ", name, row+1, col+1);
+                std::cout << Areg << std::endl;
+            }
+        } 
+    }
+
+Diag_cuSolver_gvd::Diag_cuSolver_gvd(){
+	// step 1: create cusolver/cublas handle
+	cusolverH = NULL;
+	cusolver_status = CUSOLVER_STATUS_SUCCESS;
+	cudaStat1 = cudaSuccess;
+	cudaStat2 = cudaSuccess;
+	cudaStat3 = cudaSuccess;
+	cudaStat4 = cudaSuccess;
+
+	itype = CUSOLVER_EIG_TYPE_1; // A*x = (lambda)*B*x
+	jobz = CUSOLVER_EIG_MODE_VECTOR; // compute eigenvalues and eigenvectors.
+	uplo = CUBLAS_FILL_MODE_LOWER;
+
+	d_A = NULL;
+	d_B = NULL;
+	d_work = NULL;
+
+	d_A2 = NULL;
+	d_B2 = NULL;
+	d_work2 = NULL;
+	
+	d_W = NULL;
+	devInfo = NULL;
+
+	lwork = 0;
+	info_gpu = 0;
+}
+
+void Diag_cuSolver_gvd::init_double(int N){
+// step 2: Malloc A and B on device
+
+	m = lda = N;
+	istep = 0;
+	
+	cusolver_status = cusolverDnCreate(&cusolverH);
+	assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+	
+	cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(double) * lda * m);
+	cudaStat2 = cudaMalloc ((void**)&d_B, sizeof(double) * lda * m);
+	cudaStat3 = cudaMalloc ((void**)&d_W, sizeof(double) * m);
+	cudaStat4 = cudaMalloc ((void**)&devInfo, sizeof(int));
+	assert(cudaSuccess == cudaStat1);
+	assert(cudaSuccess == cudaStat2);
+	assert(cudaSuccess == cudaStat3);
+	assert(cudaSuccess == cudaStat4);
+
+}
+
+
+void Diag_cuSolver_gvd::init_complex(int N){
+// step 2: Malloc A and B on device
+
+	m = lda = N;
+	istep = 0;
+	
+	cusolver_status = cusolverDnCreate(&cusolverH);
+	assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+	
+	cudaStat1 = cudaMalloc ((void**)&d_A2, sizeof(cuDoubleComplex) * lda * m);
+	cudaStat2 = cudaMalloc ((void**)&d_B2, sizeof(cuDoubleComplex) * lda * m);
+	cudaStat3 = cudaMalloc ((void**)&d_W, sizeof(double) * m);
+	cudaStat4 = cudaMalloc ((void**)&devInfo, sizeof(int));
+	assert(cudaSuccess == cudaStat1);
+	assert(cudaSuccess == cudaStat2);
+	assert(cudaSuccess == cudaStat3);
+	assert(cudaSuccess == cudaStat4);
+
+}
+
+
+void Diag_cuSolver_gvd::copy_double(int N, int M, double *A, double *B){
+        assert(N == M);
+        assert(M == m);
+        cudaStat1 = cudaMemcpy(d_A, A, sizeof(double) * lda * m, cudaMemcpyHostToDevice);
+        assert(cudaSuccess == cudaStat1);
+        if (istep == 0) {
+            cudaStat2 = cudaMemcpy(d_B, B, sizeof(double) * lda * m, cudaMemcpyHostToDevice);
+            assert(cudaSuccess == cudaStat2); 
+        }  
+}
+
+void Diag_cuSolver_gvd::copy_complex(int N, int M, std::complex<double> *A, std::complex<double> *B){
+        assert(N == M);
+        assert(M == m);
+        cudaStat1 = cudaMemcpy(d_A2, A, sizeof(cuDoubleComplex) * lda * m, cudaMemcpyHostToDevice);
+        assert(cudaSuccess == cudaStat1);
+        if (istep == 0) {
+            cudaStat2 = cudaMemcpy(d_B2, B, sizeof(cuDoubleComplex) * lda * m, cudaMemcpyHostToDevice);
+            assert(cudaSuccess == cudaStat2); 
+        }  
+}
+
+void Diag_cuSolver_gvd::buffer_double(){
+
+        // step 3: query working space of sygvd
+
+        //The helper functions below can calculate the sizes needed for pre-allocated buffer.
+        //The S and D data types are real valued single and double precision, respectively.
+        // The C and Z data types are complex valued single and double precision, respectively.
+        cusolver_status = cusolverDnDsygvd_bufferSize(        
+            cusolverH,
+            itype,
+            jobz,
+            uplo,
+            m,
+            d_A,
+            lda,
+            d_B,
+            lda,
+            d_W,
+            &lwork);
+
+        assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+        cudaStat1 = cudaMalloc((void**)&d_work, sizeof(double)*lwork);
+        assert(cudaSuccess == cudaStat1);
+}
+
+void Diag_cuSolver_gvd::buffer_complex(){
+
+        // step 3: query working space of sygvd
+
+        //The helper functions below can calculate the sizes needed for pre-allocated buffer.
+        //The S and D data types are real valued single and double precision, respectively.
+        // The C and Z data types are complex valued single and double precision, respectively.
+
+        cusolver_status = cusolverDnZhegvd_bufferSize(        
+                cusolverH,
+                itype,
+                jobz,
+                uplo,
+                m,
+                d_A2,
+                lda,
+                d_B2,
+                lda,
+                d_W,
+                &lwork);
+                
+        assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+        cudaStat1 = cudaMalloc((void**)&d_work2, sizeof(cuDoubleComplex)*lwork);
+        assert(cudaSuccess == cudaStat1);
+
+}
+
+void Diag_cuSolver_gvd::compute_double(){
+    // compute spectrum of (A,B)
+
+        cusolver_status = cusolverDnDsygvd(
+            cusolverH,
+            itype,
+            jobz,
+            uplo,
+            m,
+            d_A,
+            lda,
+            d_B,
+            lda,
+            d_W,
+            d_work,
+            lwork,
+            devInfo);
+
+        cudaStat1 = cudaDeviceSynchronize();
+        assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+        assert(cudaSuccess == cudaStat1);
+    }
+
+
+void Diag_cuSolver_gvd::compute_complex(){
+    // compute spectrum of (A,B)
+
+        cusolver_status = cusolverDnZhegvd(
+            cusolverH,
+            itype,
+            jobz,
+            uplo,
+            m,
+            d_A2,
+            lda,
+            d_B2,
+            lda,
+            d_W,
+            d_work2,
+            lwork,
+            devInfo);
+
+        cudaStat1 = cudaDeviceSynchronize();
+        assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+        assert(cudaSuccess == cudaStat1);
+    }
+
+
+void Diag_cuSolver_gvd::recopy_double(double *W, double *V){
+        cudaStat1 = cudaMemcpy(W, d_W, sizeof(double)*m, cudaMemcpyDeviceToHost);
+        cudaStat2 = cudaMemcpy(V, d_A, sizeof(double)*lda*m, cudaMemcpyDeviceToHost);
+        cudaStat3 = cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost);
+        assert(cudaSuccess == cudaStat1);
+        assert(cudaSuccess == cudaStat2);
+        assert(cudaSuccess == cudaStat3);
+        // printf("after sygvd: info_gpu = %d\n", info_gpu);
+        assert(0 == info_gpu);
+        if (d_work ) cudaFree(d_work);
+}
+
+void Diag_cuSolver_gvd::recopy_complex(double *W, std::complex<double> *V){
+        cudaStat1 = cudaMemcpy(W, d_W, sizeof(double)*m, cudaMemcpyDeviceToHost);
+        cudaStat2 = cudaMemcpy(V, d_A2, sizeof(std::complex<double>)*lda*m, cudaMemcpyDeviceToHost);
+        cudaStat3 = cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost);
+        assert(cudaSuccess == cudaStat1);
+        assert(cudaSuccess == cudaStat2);
+        assert(cudaSuccess == cudaStat3);
+        // printf("after sygvd: info_gpu = %d\n", info_gpu);
+        assert(0 == info_gpu);
+        if (d_work2 ) cudaFree(d_work);
+}
+
+
+void Diag_cuSolver_gvd::finalize(){
+        // free resources and destroy
+        if (d_A    ) cudaFree(d_A);
+        if (d_B    ) cudaFree(d_B);
+        if (d_A2    ) cudaFree(d_A);
+        if (d_B2    ) cudaFree(d_B);
+        if (d_W    ) cudaFree(d_W);
+        if (devInfo) cudaFree(devInfo);
+        if (cusolverH) cusolverDnDestroy(cusolverH);
+        cudaDeviceReset();
+    }
+        
+Diag_cuSolver_gvd::~Diag_cuSolver_gvd(){
+    finalize();
+}
+int Diag_cuSolver_gvd::Dngvd_double(int N, int M, double *A, double *B, double *W, double *V){
+        // printf("A = (matlab base-1)\n");
+        // printMatrix(m, m, A, lda, "A");
+        // printf("=====\n");
+        // printf("B = (matlab base-1)\n");
+        // printMatrix(m, m, B, lda, "B");
+        // printf("=====\n");
+
+        copy_double(N, M, A, B);
+        buffer_double();
+        compute_double();
+        recopy_double(W, V);
+		// istep++;
+
+    
+        // printf("eigenvalue = (matlab base-1), ascending order\n");
+        // for(int i = 0 ; i < std::min(N,10) ; i++){
+        //     printf("W[%d] = %E\n", i+1, W[i]);
+        // }
+        // for(int i = max(0, K-10) ; i < K ; i++){
+        //     printf("W[%d] = %E\n", i+1, W[i]);
+        // }
+        // printf("V = (matlab base-1)\n");
+        // printMatrix(m, m, V, lda, "V");
+        // printf("=====\n");
+        // step 4: check eigenvalues
+        // double lambda_sup = 0;
+        // for(int i = 0 ; i < m ; i++){
+        //     double error = fabs( lambda[i] - W[i]);
+        // }   lambda_sup = (lambda_sup > error)? lambda_sup : error;
+        // printf("|lambda - W| = %E\n", lambda_sup);
+
+        return 0; 
+    }
+
+
+int Diag_cuSolver_gvd::Dngvd_complex(int N, int M, std::complex<double> *A, std::complex<double> *B, double *W, std::complex<double> *V){
+        // printf("A = (matlab base-1)\n");
+        // printMatrix(m, m, A, lda, "A");
+        // printf("=====\n");
+        // printf("B = (matlab base-1)\n");
+        // printMatrix(m, m, B, lda, "B");
+        // printf("=====\n");
+
+        copy_complex(N, M, A, B);
+        buffer_complex();
+        compute_complex();
+        recopy_complex(W, V);
+		// istep++;
+
+    
+        // printf("eigenvalue = (matlab base-1), ascending order\n");
+        // for(int i = 0 ; i < std::min(N,10) ; i++){
+        //     printf("W[%d] = %E\n", i+1, W[i]);
+        // }
+        // for(int i = max(0, K-10) ; i < K ; i++){
+        //     printf("W[%d] = %E\n", i+1, W[i]);
+        // }
+        // printf("V = (matlab base-1)\n");
+        // printMatrix(m, m, V, lda, "V");
+        // printf("=====\n");
+        // step 4: check eigenvalues
+        // double lambda_sup = 0;
+        // for(int i = 0 ; i < m ; i++){
+        //     double error = fabs( lambda[i] - W[i]);
+        // }   lambda_sup = (lambda_sup > error)? lambda_sup : error;
+        // printf("|lambda - W| = %E\n", lambda_sup);
+
+        return 0; 
+    }
+

@@ -7,6 +7,7 @@
 #include "../module_base/complexmatrix.h"
 #include "pdiag_basic.h"
 #include "diag_scalapack_gvx.h"
+#include "diag_cusolver.cuh"
 
 class Pdiag_Double : public Pdiag_Basic
 {
@@ -56,6 +57,15 @@ class Pdiag_Double : public Pdiag_Basic
 	int dim1;
 
 	Diag_Scalapack_gvx diag_scalapack_gvx;			// Peize Lin add 2021.11.02
+
+	Diag_cuSolver_gvd diag_cusolver_gvd;			// Xu Shu add 2022.3.2 
+	void cuGather_double(const long maxnloc, double *mat_loc, double *mat_glb);
+	void cuGather_complex(const long maxnloc, std::complex<double> *mat_loc, std::complex<double> *mat_glb);
+	void cuDivide_double(double *mat_glb, double *mat_loc);
+	void cuDivide_complex(std::complex<double> *mat_glb, std::complex<double> *mat_loc);
+
+
+
 };
 
 #endif
