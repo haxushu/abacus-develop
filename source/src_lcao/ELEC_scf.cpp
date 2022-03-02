@@ -80,6 +80,7 @@ void ELEC_scf::scf(const int &istep)
 	for(iter=1; iter<=GlobalV::NITER; iter++)
 	{
         Print_Info::print_scf(istep, iter);
+		std::cout << "myiter:" << iter << std::endl; 
 
 		std::string ufile = "CHANGE";
 		Update_input UI;

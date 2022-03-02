@@ -5,7 +5,6 @@
 #include "../module_base/timer.h"
 //xiaohui modified 2013-03-23
 //#include "../src_develop/src_siao/selinv.h"
-
 Diago_LCAO_Matrix::Diago_LCAO_Matrix(){}
 Diago_LCAO_Matrix::~Diago_LCAO_Matrix(){}
 
@@ -257,6 +256,11 @@ void Diago_LCAO_Matrix::using_HPSEPS_double(const int &ik, ModuleBase::matrix &w
 
 	// save H and S matrix to disk.
 	bool bit = false;
+	std::cout << "saving here!" << std::endl;
+	// int myid;
+	// MPI_Comm_rank(GlobalC::ParaO.comm_2D, &myid);
+	// std::cout << GlobalV::DRANK << ", " << myid << std::endl;
+	// GlobalC::ParaO.out_hs = 1;
 	HS_Matrix::saving_HS(GlobalC::LM.Hloc.data(), GlobalC::LM.Sloc.data(), bit, GlobalC::ParaO.out_hs);
 	GlobalV::ofs_running << std::setprecision(6);
 

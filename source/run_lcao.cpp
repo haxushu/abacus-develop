@@ -121,7 +121,7 @@ void Run_lcao::lcao_line(void)
 
 //--------------------------------------
 // cell relaxation should begin here
-//--------------------------------------
+//--------------------------------------   
 
     // Initalize the plane wave basis set
     GlobalC::pw.gen_pw(GlobalV::ofs_running, GlobalC::ucell, GlobalC::kv);
