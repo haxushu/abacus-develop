@@ -74,6 +74,7 @@ std::pair<int,std::vector<int>> Diag_Scalapack_gvx::pdsygvx_once(
 }
 
 
+
 std::pair<int,std::vector<int>> Diag_Scalapack_gvx::pzhegvx_once(
 	const int*const desc,
 	const int ncol,

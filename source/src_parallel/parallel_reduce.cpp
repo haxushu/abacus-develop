@@ -3,7 +3,7 @@
 #include "../module_base/global_variable.h"
 #include "parallel_global.h"
 
-#include "../src_pw/global.h"
+
 void Parallel_Reduce::reduce_int_all(int &object)
 {
 #ifdef __MPI

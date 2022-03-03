@@ -2701,7 +2701,7 @@ void Input::Check(void)
 			{
 				
 #ifdef __MPI
-				GlobalV::ofs_warning << "cusolver is under testing" << std::endl;
+				// GlobalV::ofs_warning << "cusolver is under testing" << std::endl;
 #else
 				ModuleBase::WARNING_QUIT("Input","cusolver can not be used for series version.");
 #endif

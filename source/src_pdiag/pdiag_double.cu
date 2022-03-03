@@ -9,8 +9,6 @@
 #include "../module_base/timer.h"
 #include <chrono>
 #include <thread>
-#define NOW() std::chrono::system_clock::now()
-#define ELAPSE(x) std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - x).count()/(double)1000000.0
 
 #ifdef __MPI
 extern "C"
@@ -479,11 +477,6 @@ void Pdiag_Double::divide_HS_2d
 	assert(dim0 > 0);
 	this->dim1=GlobalV::DSIZE/dim0;
 
-	std::cout << GlobalV::DSIZE << std::endl;
-	std::cout << dim0 << std::endl;
-	std::cout << dim1 << std::endl;
-
-
 	if(testpb)ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"dim0",dim0);
 	if(testpb)ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"dim1",dim1);
 
@@ -606,52 +599,6 @@ void Pdiag_Double::diago_double_begin(
 
 #ifdef __MPI
 
-	// {
-
-	// 	static int istep = 0;
-	// 	auto print_matrix_C = [&](const std::string &file_name, double*m)
-	// 	{
-	// 		std::ofstream ofs(file_name+"-C_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
-	// 		for(int ic=0; ic<GlobalC::ParaO.ncol; ++ic)
-	// 		{
-	// 			for(int ir=0; ir<GlobalC::ParaO.nrow; ++ir)
-	// 			{
-	// 				const int index=ic*GlobalC::ParaO.nrow+ir;
-	// 				if(abs(m[index])>1E-10)
-	// 					ofs<<m[index]<<"\t";
-	// 				else
-	// 					ofs<<0<<"\t";
-	// 			}
-	// 			ofs<<std::endl;
-	// 		}
-	// 	};
-		// auto print_matrix_F = [&](const std::string &file_name, double*m)
-		// {
-		// 	std::ofstream ofs(file_name+"-F_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
-		// 	for(int ir=0; ir<GlobalC::ParaO.nrow; ++ir)
-		// 	{
-		// 		for(int ic=0; ic<GlobalC::ParaO.ncol; ++ic)
-		// 		{
-		// 			const int index=ic*GlobalC::ParaO.nrow+ir;
-		// 			if(abs(m[index])>1E-10)
-		// 				ofs<<m[index]<<"\t";
-		// 			else
-		// 				ofs<<0<<"\t";
-		// 		}
-		// 		ofs<<std::endl;
-		// 	}
-		// };
-	// 	if (istep == 0){
-	// 	std::cout << "Matrix size:" << GlobalV::NLOCAL << std::endl;
-	// 	print_matrix_F("H_gamma", h_mat);
-	// 	print_matrix_F("S_gamma", s_mat);
-	// 	print_matrix_C("H_gamma", h_mat);
-	// 	print_matrix_C("S_gamma", s_mat);
-	// 	}
-	// 	++istep;
-	// }
-
-
 	ModuleBase::TITLE("Pdiag_Double","diago_begin");
 	assert(this->loc_size > 0);
 	assert(GlobalV::NLOCAL > 0);
@@ -715,7 +662,6 @@ void Pdiag_Double::diago_double_begin(
 	}// HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
-		std::cout << "We are double elpa here now!" << std::endl;   
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -746,33 +692,9 @@ void Pdiag_Double::diago_double_begin(
         }
 
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
-		auto elpa_start = NOW();
         int elpa_error;
         elpa_generalized_eigenvectors_d(handle, h_mat, Stmp, eigen, wfc_2d.c, is_already_decomposed, &elpa_error);
-		std::cout << "double elpa cost: " << ELAPSE(elpa_start) << std::endl;
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
-
-		{
-		static int istep = 0;
-				auto print_matrix_F = [&](const std::string &file_name, double*m)
-		{
-			std::ofstream ofs(file_name+"-F_"+ModuleBase::GlobalFunc::TO_STRING(istep)+"_"+ModuleBase::GlobalFunc::TO_STRING(GlobalV::MY_RANK));
-			for(int ir=0; ir<GlobalC::ParaO.nrow; ++ir)
-			{
-				for(int ic=0; ic<GlobalC::ParaO.ncol; ++ic)
-				{
-					const int index=ic*GlobalC::ParaO.nrow+ir;
-					if(abs(m[index])>1E-10)
-						ofs<<m[index]<<"\t";
-					else
-						ofs<<0<<"\t";
-				}
-				ofs<<std::endl;
-			}
-		};
-		print_matrix_F("wfc_2d_gamma", wfc_2d.c);
-		istep++;
-		}
 
     	ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by genelpa2");
         BlasConnector::copy(GlobalV::NBANDS, eigen, inc, ekb, inc);
@@ -959,7 +881,6 @@ void Pdiag_Double::diago_double_begin(
 	} 	
 	else if(GlobalV::KS_SOLVER=="cusolver")
 	{
-		std::cout << "We are double cusolver here now!" << std::endl;   
 		wfc_2d.create(this->ncol, this->nrow, false);
 		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
 
@@ -996,11 +917,7 @@ void Pdiag_Double::diago_double_begin(
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 
 		if (myid == 0){
-			auto cs_start = NOW();
-
 			diag_cusolver_gvd.Dngvd_double(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
-			
-			std::cout << "double cusolver cost: " << ELAPSE(cs_start) << std::endl;
 		}
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
@@ -1010,8 +927,6 @@ void Pdiag_Double::diago_double_begin(
 		MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, comm_2D);
 		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
 
-		
-			// memcpy( wfc_2d.c,vtot, sizeof(double)*GlobalV::NLOCAL*GlobalV::NLOCAL );
 		cuDivide_double(vtot, wfc_2d.c);
 		    	
 		if (myid == 0){
@@ -1146,7 +1061,6 @@ void Pdiag_Double::diago_complex_begin(
 
 	if(GlobalV::KS_SOLVER=="hpseps")
 	{
-		std::cout << "We are complex hpseps here now!" << std::endl;    
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
 
@@ -1173,8 +1087,6 @@ void Pdiag_Double::diago_complex_begin(
 	} // HPSEPS method
     else if(GlobalV::KS_SOLVER=="genelpa")
     {
-		std::cout << "We are complex elpa here now!" << std::endl;    
-
         double *eigen = new double[GlobalV::NLOCAL];
         ModuleBase::GlobalFunc::ZEROS(eigen, GlobalV::NLOCAL);
         long maxnloc; // maximum number of elements in local matrix
@@ -1193,12 +1105,10 @@ void Pdiag_Double::diago_complex_begin(
         BlasConnector::copy(nloc, cs_mat, inc, Stmp, inc);
 
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
-		auto elpa_start = NOW();
         int elpa_derror;
         elpa_generalized_eigenvectors_dc(handle, reinterpret_cast<double _Complex*>(ch_mat),
                                          reinterpret_cast<double _Complex*>(Stmp),
                                          eigen, reinterpret_cast<double _Complex*>(wfc_2d.c), 0, &elpa_derror);
-		std::cout << "complex elpa cost: " << ELAPSE(elpa_start) << std::endl;
         ModuleBase::timer::tick("Diago_LCAO_Matrix","elpa_solve");
 
         // the eigenvalues.
@@ -1349,8 +1259,6 @@ void Pdiag_Double::diago_complex_begin(
 	} if(GlobalV::KS_SOLVER=="cusolver")
 	{
 
-		std::cout << "We are complex cusolver here now!" << std::endl;   
-
 		wfc_2d.create(this->ncol, this->nrow, false);
 		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
 
@@ -1387,12 +1295,7 @@ void Pdiag_Double::diago_complex_begin(
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 
 		if (myid == 0){
-
-			auto cs_start = NOW();
-
-			diag_cusolver_gvd.Dngvd_complex(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
-			
-			std::cout << "complex cusolver cost: " << ELAPSE(cs_start) << std::endl;
+			diag_cusolver_gvd.Dngvd_complex(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);			
 		}
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
@@ -1729,7 +1632,6 @@ void Diag_cuSolver_gvd::init_double(int N){
 
 	m = lda = N;
 	
-	
 	cusolver_status = cusolverDnCreate(&cusolverH);
 	assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
 	
@@ -1784,54 +1686,52 @@ void Diag_cuSolver_gvd::copy_complex(int N, int M, std::complex<double> *A, std:
 }
 
 void Diag_cuSolver_gvd::buffer_double(){
+    // step 3: query working space of sygvd
 
-        // step 3: query working space of sygvd
+    //The helper functions below can calculate the sizes needed for pre-allocated buffer.
+    //The S and D data types are real valued single and double precision, respectively.
+    // The C and Z data types are complex valued single and double precision, respectively.
+    cusolver_status = cusolverDnDsygvd_bufferSize(        
+        cusolverH,
+        itype,
+        jobz,
+        uplo,
+        m,
+        d_A,
+        lda,
+        d_B,
+        lda,
+        d_W,
+        &lwork);
 
-        //The helper functions below can calculate the sizes needed for pre-allocated buffer.
-        //The S and D data types are real valued single and double precision, respectively.
-        // The C and Z data types are complex valued single and double precision, respectively.
-        cusolver_status = cusolverDnDsygvd_bufferSize(        
+    assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+    cudaStat1 = cudaMalloc((void**)&d_work, sizeof(double)*lwork);
+    assert(cudaSuccess == cudaStat1);
+}
+
+void Diag_cuSolver_gvd::buffer_complex(){
+    // step 3: query working space of sygvd
+
+    //The helper functions below can calculate the sizes needed for pre-allocated buffer.
+    //The S and D data types are real valued single and double precision, respectively.
+    // The C and Z data types are complex valued single and double precision, respectively.
+
+    cusolver_status = cusolverDnZhegvd_bufferSize(        
             cusolverH,
             itype,
             jobz,
             uplo,
             m,
-            d_A,
+            d_A2,
             lda,
-            d_B,
+            d_B2,
             lda,
             d_W,
             &lwork);
-
-        assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
-        cudaStat1 = cudaMalloc((void**)&d_work, sizeof(double)*lwork);
-        assert(cudaSuccess == cudaStat1);
-}
-
-void Diag_cuSolver_gvd::buffer_complex(){
-
-        // step 3: query working space of sygvd
-
-        //The helper functions below can calculate the sizes needed for pre-allocated buffer.
-        //The S and D data types are real valued single and double precision, respectively.
-        // The C and Z data types are complex valued single and double precision, respectively.
-
-        cusolver_status = cusolverDnZhegvd_bufferSize(        
-                cusolverH,
-                itype,
-                jobz,
-                uplo,
-                m,
-                d_A2,
-                lda,
-                d_B2,
-                lda,
-                d_W,
-                &lwork);
-                
-        assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
-        cudaStat1 = cudaMalloc((void**)&d_work2, sizeof(cuDoubleComplex)*lwork);
-        assert(cudaSuccess == cudaStat1);
+            
+    assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+    cudaStat1 = cudaMalloc((void**)&d_work2, sizeof(cuDoubleComplex)*lwork);
+    assert(cudaSuccess == cudaStat1);
 
 }
 
@@ -1890,7 +1790,6 @@ void Diag_cuSolver_gvd::recopy_double(double *W, double *V){
         assert(cudaSuccess == cudaStat1);
         assert(cudaSuccess == cudaStat2);
         assert(cudaSuccess == cudaStat3);
-        // printf("after sygvd: info_gpu = %d\n", info_gpu);
         assert(0 == info_gpu);
         if (d_work ) cudaFree(d_work);
 }
@@ -1902,7 +1801,6 @@ void Diag_cuSolver_gvd::recopy_complex(double *W, std::complex<double> *V){
         assert(cudaSuccess == cudaStat1);
         assert(cudaSuccess == cudaStat2);
         assert(cudaSuccess == cudaStat3);
-        // printf("after sygvd: info_gpu = %d\n", info_gpu);
         assert(0 == info_gpu);
         if (d_work2 ) cudaFree(d_work);
 }
@@ -1924,73 +1822,23 @@ Diag_cuSolver_gvd::~Diag_cuSolver_gvd(){
     finalize();
 }
 int Diag_cuSolver_gvd::Dngvd_double(int N, int M, double *A, double *B, double *W, double *V){
-        // printf("A = (matlab base-1)\n");
-        // printMatrix(m, m, A, lda, "A");
-        // printf("=====\n");
-        // printf("B = (matlab base-1)\n");
-        // printMatrix(m, m, B, lda, "B");
-        // printf("=====\n");
 
         copy_double(N, M, A, B);
         buffer_double();
         compute_double();
         recopy_double(W, V);
-		// istep++;
-
-    
-        // printf("eigenvalue = (matlab base-1), ascending order\n");
-        // for(int i = 0 ; i < std::min(N,10) ; i++){
-        //     printf("W[%d] = %E\n", i+1, W[i]);
-        // }
-        // for(int i = max(0, K-10) ; i < K ; i++){
-        //     printf("W[%d] = %E\n", i+1, W[i]);
-        // }
-        // printf("V = (matlab base-1)\n");
-        // printMatrix(m, m, V, lda, "V");
-        // printf("=====\n");
-        // step 4: check eigenvalues
-        // double lambda_sup = 0;
-        // for(int i = 0 ; i < m ; i++){
-        //     double error = fabs( lambda[i] - W[i]);
-        // }   lambda_sup = (lambda_sup > error)? lambda_sup : error;
-        // printf("|lambda - W| = %E\n", lambda_sup);
 
         return 0; 
-    }
+}
 
 
 int Diag_cuSolver_gvd::Dngvd_complex(int N, int M, std::complex<double> *A, std::complex<double> *B, double *W, std::complex<double> *V){
-        // printf("A = (matlab base-1)\n");
-        // printMatrix(m, m, A, lda, "A");
-        // printf("=====\n");
-        // printf("B = (matlab base-1)\n");
-        // printMatrix(m, m, B, lda, "B");
-        // printf("=====\n");
 
         copy_complex(N, M, A, B);
         buffer_complex();
         compute_complex();
         recopy_complex(W, V);
-		// istep++;
-
-    
-        // printf("eigenvalue = (matlab base-1), ascending order\n");
-        // for(int i = 0 ; i < std::min(N,10) ; i++){
-        //     printf("W[%d] = %E\n", i+1, W[i]);
-        // }
-        // for(int i = max(0, K-10) ; i < K ; i++){
-        //     printf("W[%d] = %E\n", i+1, W[i]);
-        // }
-        // printf("V = (matlab base-1)\n");
-        // printMatrix(m, m, V, lda, "V");
-        // printf("=====\n");
-        // step 4: check eigenvalues
-        // double lambda_sup = 0;
-        // for(int i = 0 ; i < m ; i++){
-        //     double error = fabs( lambda[i] - W[i]);
-        // }   lambda_sup = (lambda_sup > error)? lambda_sup : error;
-        // printf("|lambda - W| = %E\n", lambda_sup);
 
         return 0; 
-    }
+}
 

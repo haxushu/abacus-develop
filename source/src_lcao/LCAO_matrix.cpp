@@ -178,7 +178,7 @@ void LCAO_Matrix::set_HSgamma(
     // save the matrix as column major format
     if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")
     {
-        index=ic*GlobalC::ParaO.nrow+ir;               
+        index=ic*GlobalC::ParaO.nrow+ir;
     }
     else
     {

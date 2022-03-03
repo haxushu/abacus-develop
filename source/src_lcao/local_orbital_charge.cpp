@@ -91,8 +91,6 @@ void Local_Orbital_Charge::allocate_dm_wfc(const Grid_Technique &gt)
 		this->allocate_DM_k();
 	}
 
-        std::cout << "allocate_dm_wfc PASS >>>>!" << std::endl;
-
 	return;
 }
 
@@ -114,7 +112,7 @@ void Local_Orbital_Charge::sum_bands(void)
     } 
 
     //xiaohui add 2013-09-02
-    if(GlobalV::GAMMA_ONLY_LOCAL)   
+    if(GlobalV::GAMMA_ONLY_LOCAL)
     {
         if(GlobalV::KS_SOLVER=="selinv")
         {

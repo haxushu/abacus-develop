@@ -34,7 +34,6 @@ void LCAO_Hamilt::set_lcao_matrices(void)
 
     if(GlobalV::GAMMA_ONLY_LOCAL)
     {
-        std::cout << "TEST set_lcao_matrices >>>>!" << std::endl;
         // mohan add 2012-03-29
         // calculate the grid integration of 'Vl' matrix for gamma algorithms.
         this->GG.prepare(GlobalC::ucell.latvec, GlobalC::ucell.lat0);
