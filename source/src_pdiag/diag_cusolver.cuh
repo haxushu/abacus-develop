@@ -26,7 +26,6 @@ class Diag_cuSolver_gvd{
 
     int m;
     int lda;
-    int istep;
 
     double *d_A;
     double *d_B;
@@ -44,7 +43,7 @@ class Diag_cuSolver_gvd{
 
 public:
 
-
+    int init_flag;
 
     template<typename T>
     void printMatrix(int m, int n, T *A, int lda, const char* name);

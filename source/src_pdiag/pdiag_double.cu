@@ -10,7 +10,7 @@
 #include <chrono>
 #include <thread>
 #define NOW() std::chrono::system_clock::now()
-#define ELAPSE(x) std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - x).count()/(double)1000.0
+#define ELAPSE(x) std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - x).count()/(double)1000000.0
 
 #ifdef __MPI
 extern "C"
@@ -986,15 +986,16 @@ void Pdiag_Double::diago_double_begin(
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
 
+		if(myid == 0 && !diag_cusolver_gvd.init_flag){
+			ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_init");
+			diag_cusolver_gvd.init_double(GlobalV::NLOCAL);
+			diag_cusolver_gvd.init_flag = 1;
+			ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_init");
+		}
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 
 		if (myid == 0){
-
-			if(ifElpaHandle(GlobalC::CHR.get_new_e_iteration(), (GlobalV::CALCULATION=="nscf"))){
-				diag_cusolver_gvd.init_double(GlobalV::NLOCAL);
-        	}
-
 			auto cs_start = NOW();
 
 			diag_cusolver_gvd.Dngvd_double(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
@@ -1376,14 +1377,16 @@ void Pdiag_Double::diago_complex_begin(
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
 
+		if(myid == 0 && !diag_cusolver_gvd.init_flag){
+			ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_init");
+			diag_cusolver_gvd.init_complex(GlobalV::NLOCAL);
+			diag_cusolver_gvd.init_flag = 1;
+			ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_init");
+		}
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
 
 		if (myid == 0){
-
-			if(ifElpaHandle(GlobalC::CHR.get_new_e_iteration(), (GlobalV::CALCULATION=="nscf"))){
-				diag_cusolver_gvd.init_complex(GlobalV::NLOCAL);
-        	}
 
 			auto cs_start = NOW();
 
@@ -1718,13 +1721,14 @@ Diag_cuSolver_gvd::Diag_cuSolver_gvd(){
 
 	lwork = 0;
 	info_gpu = 0;
+	init_flag = 0;
 }
 
 void Diag_cuSolver_gvd::init_double(int N){
 // step 2: Malloc A and B on device
 
 	m = lda = N;
-	istep = 0;
+	
 	
 	cusolver_status = cusolverDnCreate(&cusolverH);
 	assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
@@ -1745,7 +1749,6 @@ void Diag_cuSolver_gvd::init_complex(int N){
 // step 2: Malloc A and B on device
 
 	m = lda = N;
-	istep = 0;
 	
 	cusolver_status = cusolverDnCreate(&cusolverH);
 	assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
@@ -1767,10 +1770,8 @@ void Diag_cuSolver_gvd::copy_double(int N, int M, double *A, double *B){
         assert(M == m);
         cudaStat1 = cudaMemcpy(d_A, A, sizeof(double) * lda * m, cudaMemcpyHostToDevice);
         assert(cudaSuccess == cudaStat1);
-        if (istep == 0) {
-            cudaStat2 = cudaMemcpy(d_B, B, sizeof(double) * lda * m, cudaMemcpyHostToDevice);
-            assert(cudaSuccess == cudaStat2); 
-        }  
+        cudaStat2 = cudaMemcpy(d_B, B, sizeof(double) * lda * m, cudaMemcpyHostToDevice);
+        assert(cudaSuccess == cudaStat2); 
 }
 
 void Diag_cuSolver_gvd::copy_complex(int N, int M, std::complex<double> *A, std::complex<double> *B){
@@ -1778,10 +1779,8 @@ void Diag_cuSolver_gvd::copy_complex(int N, int M, std::complex<double> *A, std:
         assert(M == m);
         cudaStat1 = cudaMemcpy(d_A2, A, sizeof(cuDoubleComplex) * lda * m, cudaMemcpyHostToDevice);
         assert(cudaSuccess == cudaStat1);
-        if (istep == 0) {
-            cudaStat2 = cudaMemcpy(d_B2, B, sizeof(cuDoubleComplex) * lda * m, cudaMemcpyHostToDevice);
-            assert(cudaSuccess == cudaStat2); 
-        }  
+		cudaStat2 = cudaMemcpy(d_B2, B, sizeof(cuDoubleComplex) * lda * m, cudaMemcpyHostToDevice);
+		assert(cudaSuccess == cudaStat2); 
 }
 
 void Diag_cuSolver_gvd::buffer_double(){
