@@ -39,9 +39,6 @@ public:
 
     int init_flag;
 
-    template<typename T>
-    void printMatrix(int m, int n, T *A, int lda, const char* name);
-
     void init_double(int N);
     void init_complex(int N);
 

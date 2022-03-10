@@ -58,13 +58,13 @@ class Pdiag_Double : public Pdiag_Basic
 
 	Diag_Scalapack_gvx diag_scalapack_gvx;			// Peize Lin add 2021.11.02
 
-// #ifdef __CUSOLVER_LCAO								// Xu Shu add 2022.3.2 
+#ifdef __CUSOLVER_LCAO								// Xu Shu add 2022.3.2 
 	Diag_cuSolver_gvd diag_cusolver_gvd;			
-// #endif
 	void cuGather_double(double *mat_loc, double *mat_glb);
 	void cuGather_complex(const long maxnloc, std::complex<double> *mat_loc, std::complex<double> *mat_glb);
 	void cuDivide_double(double *mat_glb, double *mat_loc);
 	void cuDivide_complex(std::complex<double> *mat_glb, std::complex<double> *mat_loc);
+#endif
 
 
 

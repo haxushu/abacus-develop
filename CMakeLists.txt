@@ -13,8 +13,8 @@ project(ABACUS
 
 option(ENABLE_DEEPKS "Enable DeePKS functionality" OFF)
 option(ENABLE_LIBXC "Enable LibXC functionality" OFF)
-option(USE_CUDA "Enable support to CUDA." OFF)
-option(USE_CUSOLVER "Enable support to CUSOLVER." OFF)
+option(USE_CUDA_PW "Enable support to CUDA for PW." OFF)
+option(USE_CUSOLVER_LCAO "Enable support to CUSOLVER for LCAO." OFF)
 option(USE_ROCM "Enable support to ROCm." OFF)
 option(USE_OPENMP " Enable OpenMP in abacus." ON)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -59,22 +59,32 @@ set(CMAKE_CXX_STANDARD 11)
 include(CheckLanguage)
 check_language(CUDA)
 if(CMAKE_CUDA_COMPILER)
-  if(NOT DEFINED USE_CUDA)
-    message("CUDA components detected. \nWill build the CUDA version of ABACUS.")
-    set(USE_CUDA ON)
+  if(NOT DEFINED USE_CUDA_PW OR NOT DEFINED USE_CUSOLVER_LCAO)
+    if (NOT DEFINED USE_CUDA_PW AND NOT DEFINED USE_CUSOLVER_LCAO)
+      message("CUDA components detected. \nWill build the CUDA for PW version of ABACUS by default.")
+      set(USE_CUDA_PW ON)
+      set(USE_CUSOLVER_LCAO OFF)
+    elseif (NOT DEFINED USE_CUDA_PW)
+      set(USE_CUDA_PW OFF)
+    else()
+      set(USE_CUSOLVER_LCAO OFF)
+    endif()
   else()
-    if(NOT USE_CUDA)
-      message(WARNING "CUDA components detected, but USE_CUDA set to OFF. \nNOT building CUDA version of ABACUS.")
+    if(NOT USE_CUDA_PW AND NOT USE_CUSOLVER_LCAO)
+      message(WARNING "CUDA components detected, but both USE_CUDA_PW and USE_CUSOLVER_LCAO set to OFF. \nNOT building CUDA version of ABACUS.")
+    elseif (USE_CUDA_PW AND USE_CUSOLVER_LCAO)
+      message(FATAL_ERROR "USE_CUDA_PW and USE_CUSOLVER_LCAO set, but now they not allowed to coexist.")
     endif()
   endif()
 else() # CUDA not found
-  if (USE_CUDA)
-    message(FATAL_ERROR "USE_CUDA set but no CUDA components found.")
-    set(USE_CUDA OFF)
+  if (USE_CUDA_PW OR USE_CUSOLVER_LCAO)
+    message(FATAL_ERROR "USE_CUDA_PW or USE_CUSOLVER_LCAO set but no CUDA components found.")
+    set(USE_CUDA_PW OFF)
+    set(USE_CUSOLVER_LCAO OFF)
   endif()
 endif()
 
-if(USE_CUDA)
+if(USE_CUDA_PW)
   set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_EXTENSIONS ON)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -96,11 +106,32 @@ if(USE_CUDA)
   75 # T4
   )
   include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-  # add_compile_definitions(__CUDA)
-  set(USE_CUDA OFF)
-  set(USE_CUSOLVER ON)
-  add_compile_definitions(__CUSOLVER)
-  message(WARNING "USE_CUDA is set as ON, while USE_CUDA is set as OFF.\nOnly __CUSOLVER is defined, while __CUDA is not defined.")
+  add_compile_definitions(__CUDA)
+endif()
+
+if(USE_CUSOLVER_LCAO)
+  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_EXTENSIONS ON)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+  set(CMAKE_CUDA_STANDARD 14)
+  set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+  set(CMAKE_CUDA_HOST_COMPILER ${CMAKE_CXX_COMPILER})
+  enable_language(CUDA)
+  target_link_libraries(${ABACUS_BIN_NAME}
+    -lcufft
+    -lcublas
+    -lcudart
+    -lcusolver
+    -lnvToolsExt
+  )
+  set_property(TARGET ${ABACUS_BIN_NAME}
+  PROPERTY CUDA_ARCHITECTURES
+  60 # P100
+  70 # V100
+  75 # T4
+  )
+  include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+  add_compile_definitions(__CUSOLVER_LCAO)
 endif()
 
 # Warning: CMake add support to HIP in version 3.21. This is rather a new version.
