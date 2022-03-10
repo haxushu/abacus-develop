@@ -1285,8 +1285,8 @@ void Pdiag_Double::diago_complex_begin(
         MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
         MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
         
-		cuGather_complex(maxnloc, ch_mat, htot);
-		cuGather_complex(maxnloc, cs_mat, stot);
+		cuGather_complex(ch_mat, htot);
+		cuGather_complex(cs_mat, stot);
 
 		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
 
@@ -1473,190 +1473,100 @@ void Pdiag_Double::readin(
 #ifdef __CUSOLVER_LCAO								// Xu Shu add 2022.3.2 
 
 void Pdiag_Double::cuGather_double(double *mat_loc, double *mat_glb){
-    int myid;
+    
+	int myid;
     MPI_Comm_rank(comm_2D, &myid);
-    if(GlobalV::KS_SOLVER == "cusolver"){
 
-        int maxncol;
+	int maxncol;
 
-        MPI_Allreduce(&ncol, &maxncol, 1, MPI_INT, MPI_MAX, comm_2D);
-        // MPI_Reduce(&ncol, &maxncol, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
-        // MPI_Bcast(&maxncol, 1, MPI_LONG, 0, comm_2D);
+	MPI_Allreduce(&ncol, &maxncol, 1, MPI_INT, MPI_MAX, comm_2D);
+	// MPI_Reduce(&ncol, &maxncol, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
+	// MPI_Bcast(&maxncol, 1, MPI_LONG, 0, comm_2D);
 
-        int displs[dim1], rcounts[dim1];
-        for (int j = 0; j < dim1; j++ ) 
-        {
-            rcounts[j] = nrow;
-            displs[j] = j * nrow ;
-        }
+	int displs[dim1], rcounts[dim1];
+	for (int j = 0; j < dim1; j++ ) 
+	{
+		rcounts[j] = nrow;
+		displs[j] = j * nrow ;
+	}
 
-        for(int i = 0; i < maxncol - 1; i++){
-            MPI_Gatherv(mat_loc + i*nrow, nrow, MPI_DOUBLE, mat_glb + i*dim1*nrow, rcounts, displs, MPI_DOUBLE, 0, comm_2D);   
-        }
+	for(int i = 0; i < maxncol - 1; i++){
+		MPI_Gatherv(mat_loc + i*nrow, nrow, MPI_DOUBLE, mat_glb + i*dim1*nrow, rcounts, displs, MPI_DOUBLE, 0, comm_2D);   
+	}
 
-        if (GlobalV::NLOCAL % dim1) 
-            for (int j = GlobalV::NLOCAL % dim1; j < dim1; j++ ) rcounts[j] = 0;
+	if (GlobalV::NLOCAL % dim1) 
+		for (int j = GlobalV::NLOCAL % dim1; j < dim1; j++ ) rcounts[j] = 0;
 
-        MPI_Gatherv(mat_loc + (maxncol - 1)*nrow, rcounts[myid], MPI_DOUBLE, mat_glb + (maxncol - 1)*dim1*nrow, rcounts, displs, MPI_DOUBLE, 0, comm_2D);  
-
-    } else{ 
-
-        long maxnloc; // maximum number of elements in local matrix
-        MPI_Reduce(&nloc, &maxnloc, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
-        MPI_Bcast(&maxnloc, 1, MPI_LONG, 0, comm_2D);
-        int naroc[2]; 
-        double *work=new double[maxnloc]; // work/buffer matrix
-
-        for(int iprow=0; iprow<dim0; ++iprow)
-        {
-            for(int ipcol=0; ipcol<dim1; ++ipcol)
-            {
-                const int coord[2]={iprow, ipcol};
-                int src_rank;
-                MPI_Cart_rank(comm_2D, coord, &src_rank);
-                if(myid==src_rank)
-                {
-                    BlasConnector::copy(nloc, mat_loc, 1, work, 1);
-                    naroc[0]=nrow;
-                    naroc[1]=ncol;
-                }
-
-                ModuleBase::timer::tick("Diago_LCAO_Matrix","BCAST_HS");
-                MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
-                MPI_Bcast(work, maxnloc, MPI_DOUBLE, src_rank, comm_2D);
-                ModuleBase::timer::tick("Diago_LCAO_Matrix","BCAST_HS");
-
-                ModuleBase::timer::tick("Diago_LCAO_Matrix","ASSIN_HS");
-                if (myid == 0){
-                    for(int j=0; j<naroc[1]; ++j)
-                    {
-                        int igcol=globalIndex(j, nb, dim1, ipcol);
-                        if (GlobalV::KS_SOLVER == "cusolver")
-                            memcpy(mat_glb + igcol*GlobalV::NLOCAL, work+j*naroc[0], naroc[0] * sizeof(double));
-                        else {
-                            for(int i=0; i<naroc[0]; ++i)
-                            {
-                                int igrow=globalIndex(i, nb, dim0, iprow);
-                                mat_glb[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
-                            }
-                        }
-                    }
-                }
-                ModuleBase::timer::tick("Diago_LCAO_Matrix","ASSIN_HS");
-
-            }
-        }
-        delete[] work;   
-
-    }
+	MPI_Gatherv(mat_loc + (maxncol - 1)*nrow, rcounts[myid], MPI_DOUBLE, mat_glb + (maxncol - 1)*dim1*nrow, rcounts, displs, MPI_DOUBLE, 0, comm_2D);  
 
 }
 
 
 
-void Pdiag_Double::cuGather_complex(const long maxnloc, std::complex<double> *mat_loc, std::complex<double> *mat_glb){
-    int myid;
+void Pdiag_Double::cuGather_complex(std::complex<double> *mat_loc, std::complex<double> *mat_glb){
+
+	int myid;
     MPI_Comm_rank(comm_2D, &myid);
-    int naroc[2]; 
-    std::complex<double> *work=new std::complex<double>[maxnloc]; // work/buffer matrix
-    
-    for(int iprow=0; iprow<dim0; ++iprow)
-    {
-        for(int ipcol=0; ipcol<dim1; ++ipcol)
-        {
-            const int coord[2]={iprow, ipcol};
-            int src_rank;
-            MPI_Cart_rank(comm_2D, coord, &src_rank);
-            if(myid==src_rank)
-            {
-                BlasConnector::copy(nloc, mat_loc, 1, work, 1);
-                naroc[0]=nrow;
-                naroc[1]=ncol;
-            }
-            MPI_Bcast(naroc, 2, MPI_INT, src_rank, comm_2D);
-            MPI_Bcast(work, maxnloc, MPI_DOUBLE_COMPLEX, src_rank, comm_2D);
 
+	int maxncol;
 
-            for(int j=0; j<naroc[1]; ++j)
-            {
-                int igcol=globalIndex(j, nb, dim1, ipcol);
-                for(int i=0; i<naroc[0]; ++i)
-                {
-                    int igrow=globalIndex(i, nb, dim0, iprow);
-                    if (myid == 0) mat_glb[igcol*GlobalV::NLOCAL + igrow]=work[j*naroc[0]+i];
-                }
-            }
-        }
-    }
+	MPI_Allreduce(&ncol, &maxncol, 1, MPI_INT, MPI_MAX, comm_2D);
+	// MPI_Reduce(&ncol, &maxncol, 1, MPI_LONG, MPI_MAX, 0, comm_2D);
+	// MPI_Bcast(&maxncol, 1, MPI_LONG, 0, comm_2D);
 
-    delete[] work;   
+	int displs[dim1], rcounts[dim1];
+	for (int j = 0; j < dim1; j++ ) 
+	{
+		rcounts[j] = nrow;
+		displs[j] = j * nrow ;
+	}
+
+	for(int i = 0; i < maxncol - 1; i++){
+		MPI_Gatherv(mat_loc + i*nrow, nrow, MPI_DOUBLE_COMPLEX, mat_glb + i*dim1*nrow, rcounts, displs, MPI_DOUBLE_COMPLEX, 0, comm_2D);   
+	}
+
+	if (GlobalV::NLOCAL % dim1) 
+		for (int j = GlobalV::NLOCAL % dim1; j < dim1; j++ ) rcounts[j] = 0;
+
+	MPI_Gatherv(mat_loc + (maxncol - 1)*nrow, rcounts[myid], MPI_DOUBLE_COMPLEX, mat_glb + (maxncol - 1)*dim1*nrow, rcounts, displs, MPI_DOUBLE_COMPLEX, 0, comm_2D);  
+
 }
 
 void Pdiag_Double::cuDivide_double(double *mat_glb, double *mat_loc){
     int myid;
     MPI_Comm_rank(comm_2D, &myid);
-    MPI_Request request[ncol];
     MPI_Status status;
-    if(GlobalV::KS_SOLVER == "cusolver"){
-        if (myid == 0){
-            for (int i =0; i < GlobalV::NLOCAL; i++){
-                if ((i % dim1) == 0) continue;
-                // MPI_Isend(mat_glb + i*nrow, nrow, MPI_DOUBLE, i%dim1, i/dim1, comm_2D, request);
-                MPI_Send(mat_glb + i*nrow, nrow, MPI_DOUBLE, i%dim1, i/dim1, comm_2D);
-            }
-            for (int i =0; i < GlobalV::NLOCAL; i+=dim1)
-                memcpy(mat_loc + i/dim1*nrow, mat_glb + i*nrow, nrow*sizeof(double));
-        } else {
-            for (int i = 0; i < ncol; i++)
-                MPI_Recv(mat_loc + i*nrow, nrow, MPI_DOUBLE, 0, i, comm_2D, &status);
-            //     MPI_Irecv(mat_loc + i*nrow, nrow, MPI_DOUBLE, 0, i*dim1+myid, comm_2D, request+i);
-            // for (int i = 0; i < ncol; i++) 
-            //     MPI_Wait(request + i, &status);
-        }
 
-    } else {
-        MPI_Bcast(mat_glb, GlobalV::NLOCAL*GlobalV::NLOCAL, MPI_DOUBLE, 0, comm_2D);
-        for(int iprow=0; iprow<dim0; ++iprow){
-            for(int ipcol=0; ipcol<dim1; ++ipcol){
-                const int coord[2]={iprow, ipcol};
-                int src_rank;
-                MPI_Cart_rank(comm_2D, coord, &src_rank);
-                if (src_rank != myid) continue;
-                for(int j=0; j<ncol; ++j)
-                {
-                    int igcol=globalIndex(j, nb, dim1, ipcol);
-                    for(int i=0; i<nrow; ++i)
-                    {
-                        int igrow=globalIndex(i, nb, dim0, iprow);
-                        mat_loc[j*nrow+i] = mat_glb[igcol*GlobalV::NLOCAL + igrow];
-                    }
-                }
-            }//loop ipcol
-        }//loop iprow
-    }
+	if (myid == 0){
+		for (int i =0; i < GlobalV::NLOCAL; i++){
+			if ((i % dim1) == 0) continue;
+			MPI_Send(mat_glb + i*nrow, nrow, MPI_DOUBLE, i%dim1, i/dim1, comm_2D);
+		}
+		for (int i =0; i < GlobalV::NLOCAL; i+=dim1)
+			memcpy(mat_loc + i/dim1*nrow, mat_glb + i*nrow, nrow*sizeof(double));
+	} else {
+		for (int i = 0; i < ncol; i++)
+			MPI_Recv(mat_loc + i*nrow, nrow, MPI_DOUBLE, 0, i, comm_2D, &status);
+	}
+
 }
 
 void Pdiag_Double::cuDivide_complex(std::complex<double> *mat_glb, std::complex<double> *mat_loc){
     int myid;
     MPI_Comm_rank(comm_2D, &myid);
-    MPI_Bcast(mat_glb, GlobalV::NLOCAL*GlobalV::NLOCAL, MPI_DOUBLE_COMPLEX, 0, comm_2D);
-    for(int iprow=0; iprow<dim0; ++iprow){
-        for(int ipcol=0; ipcol<dim1; ++ipcol){
-            const int coord[2]={iprow, ipcol};
-            int src_rank;
-            MPI_Cart_rank(comm_2D, coord, &src_rank);
-            if (src_rank != myid) continue;
-            for(int j=0; j<ncol; ++j)
-            {
-                int igcol=globalIndex(j, nb, dim1, ipcol);
-                for(int i=0; i<nrow; ++i)
-                {
-                    int igrow=globalIndex(i, nb, dim0, iprow);
-                    mat_loc[j*nrow+i] = mat_glb[igcol*GlobalV::NLOCAL + igrow];
-                }
-            }
-        }//loop ipcol
-    }//loop iprow
+    MPI_Status status;
+
+	if (myid == 0){
+		for (int i =0; i < GlobalV::NLOCAL; i++){
+			if ((i % dim1) == 0) continue;
+			MPI_Send(mat_glb + i*nrow, nrow, MPI_DOUBLE_COMPLEX, i%dim1, i/dim1, comm_2D);
+		}
+		for (int i =0; i < GlobalV::NLOCAL; i+=dim1)
+			memcpy(mat_loc + i/dim1*nrow, mat_glb + i*nrow, nrow*sizeof(std::complex<double>));
+	} else {
+		for (int i = 0; i < ncol; i++)
+			MPI_Recv(mat_loc + i*nrow, nrow, MPI_DOUBLE_COMPLEX, 0, i, comm_2D, &status);
+	}
 }
 
 #endif
