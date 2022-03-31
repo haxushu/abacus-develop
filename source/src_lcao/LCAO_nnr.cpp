@@ -490,7 +490,7 @@ void LCAO_Matrix::folding_fixedH(const int &ik)
 							if(nu<0)continue;
 							//const int iic = mu*pv->ncol+nu;
                             int iic;
-                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+                            if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
                             {
                                 iic=mu+nu*pv->nrow;
                             }

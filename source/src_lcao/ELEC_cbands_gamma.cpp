@@ -20,7 +20,7 @@ void ELEC_cbands_gamma::cal_bands(const int& istep, LCAO_Hamilt& uhm,
 	ModuleBase::timer::tick("ELEC_cband_gamma","cal_bands");
 
 	assert(GlobalV::NSPIN == GlobalC::kv.nks);
-						
+
 	// pool parallization in future -- mohan note 2021-02-09
 	for(int ik=0; ik<GlobalC::kv.nks; ik++)
 	{	

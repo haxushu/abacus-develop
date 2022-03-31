@@ -5,7 +5,6 @@
 #include "../module_base/global_variable.h"
 #include "LCAO_hamilt.h"
 #include "src_lcao/local_orbital_wfc.h"
-
 //-----------------------------------------------------------
 // mohan add 2021-02-09
 // This class is used to calculate the band structures
@@ -23,8 +22,7 @@ class ELEC_cbands_gamma
 	public:
 
 	ELEC_cbands_gamma();
-	~ELEC_cbands_gamma();
-
+	~ELEC_cbands_gamma();		
 
 	private:
 

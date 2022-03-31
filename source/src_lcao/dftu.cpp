@@ -1627,7 +1627,7 @@ void DFTU::folding_overlap_matrix(const int ik, std::complex<double>* Sk,
 							if(nu<0)continue;
 							//const int iic = mu*lm.ParaV->ncol+nu;
 							int iic;
-							if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+							if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
 							{
 								iic=mu+nu*lm.ParaV->nrow;
 							}

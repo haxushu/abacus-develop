@@ -126,7 +126,7 @@ void Pdiag_Double::diago_double_begin(
 		++istep;
 	}
 	#endif
-
+	
 #ifdef __MPI
 	ModuleBase::TITLE("Pdiag_Double","diago_begin");
 	assert(pv->loc_size > 0);
@@ -310,6 +310,56 @@ void Pdiag_Double::diago_double_begin(
 		diag_scalapack_gvx.pdsygvx_diag(pv->desc, pv->ncol, pv->nrow, h_mat, s_mat, ekb, lowf.wfc_gamma[ik]);		// Peize Lin add 2021.11.02
 	}
     //delete[] Stmp; //LiuXh 20171109
+	#ifdef __CUSOLVER_LCAO
+	else if(GlobalV::KS_SOLVER=="cusolver")
+	{
+		int myid;
+		MPI_Comm_rank(pv->comm_2D, &myid);
+
+        lowf.wfc_gamma[ik].create(pv->ncol, pv->nrow);			// Fortran order
+		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+		double *htot, *stot, *vtot;
+		vtot = new double[GlobalV::NLOCAL * GlobalV::NLOCAL];
+		ModuleBase::Memory::record("Pdiag_Basic","vtot",GlobalV::NLOCAL*GlobalV::NLOCAL,"double");
+		if(myid==0)    // htot  NLOCAL * NLOCAL
+		{
+			htot = new double[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","htot",GlobalV::NLOCAL*GlobalV::NLOCAL,"double");
+
+			stot = new double[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","stot",GlobalV::NLOCAL*GlobalV::NLOCAL,"double");
+		}
+		rootGather_double(h_mat, htot);
+		rootGather_double(s_mat, stot);
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		if (myid == 0){
+			diag_cusolver_gvd.Dngvd_double(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);
+		}
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
+
+		if (myid == 0)	memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, pv->comm_2D);
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
+
+        ModuleBase::timer::tick("Diago_LCAO_Matrix","DIVIDE_EIG");
+		rootDivide_double(vtot, lowf.wfc_gamma[ik].c);
+        ModuleBase::timer::tick("Diago_LCAO_Matrix","DIVIDE_EIG");
+
+		double** wfc_grid = nullptr;    //output but not do "2d-to-grid" conversion
+        lowf.wfc_2d_to_grid(this->out_lowf, lowf.wfc_gamma[ik].c, wfc_grid);
+
+		if (myid == 0){
+			delete[] htot;
+			delete[] stot;
+		}
+		delete[] vtot;
+	} 
+	#endif	//__CUSOLVER_LCAO
 #endif
 
 #ifdef TEST_DIAG
@@ -487,6 +537,54 @@ void Pdiag_Double::diago_complex_begin(
         lowf.wfc_2d_to_grid(this->out_wfc_lcao, lowf.wfc_k[ik].c, lowf.wfc_k_grid[ik], ik);
 
     }
+	#ifdef __CUSOLVER_LCAO
+	else if(GlobalV::KS_SOLVER=="cusolver")
+	{
+		int myid;
+		MPI_Comm_rank(pv->comm_2D, &myid);
+        lowf.wfc_k[ik].create(pv->ncol, pv->nrow);            // Fortran order
+		std::vector<double> ekb_tmp(GlobalV::NLOCAL,0);
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+		std::complex<double> *htot, *stot, *vtot;
+		vtot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+		ModuleBase::Memory::record("Pdiag_Basic","vtot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+		if(myid==0)    // htot  NLOCAL * NLOCAL
+		{
+			htot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","htot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+
+			stot = new std::complex<double>[GlobalV::NLOCAL * GlobalV::NLOCAL];
+			ModuleBase::Memory::record("Pdiag_Basic","stot",GlobalV::NLOCAL*GlobalV::NLOCAL,"cdouble");
+		}
+		rootGather_complex(ch_mat, htot);
+		rootGather_complex(cs_mat, stot);
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","gath_HS");
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		if (myid == 0){
+			diag_cusolver_gvd.Dngvd_complex(GlobalV::NLOCAL, GlobalV::NLOCAL, htot, stot, ekb_tmp.data(), vtot);			
+		}
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","cusolver_gvd_solve");
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"K-S equation was solved by cusolver");
+
+		if (myid == 0)	memcpy( ekb, ekb_tmp.data(), sizeof(double)*GlobalV::NBANDS );
+		MPI_Bcast(ekb, GlobalV::NBANDS, MPI_DOUBLE, 0, pv->comm_2D);
+		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_running,"eigenvalues were copied to ekb");
+
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","DIVIDE_EIG");
+		rootDivide_complex(vtot, lowf.wfc_k[ik].c);
+		ModuleBase::timer::tick("Diago_LCAO_Matrix","DIVIDE_EIG");
+
+		lowf.wfc_2d_to_grid(this->out_lowf, lowf.wfc_k[ik].c, lowf.wfc_k_grid[ik], ik);
+			
+		if (myid == 0){
+			delete[] htot;
+			delete[] stot;
+		}
+		delete[] vtot;
+	}
+	#endif	//__CUSOLVER_LCAO
 
 #endif
 	return;
@@ -1098,3 +1196,116 @@ MPI_Barrier(comm);
     return;
 }
 #endif
+
+
+
+
+#ifdef __CUSOLVER_LCAO								// Xu Shu add 2022.3.2 
+// To accelerate the solution of generalized eigenvalue problems by a single GPU. the following mpi communication subroutines are needed.
+// We first need to gather from all the processes to form the whole H and S matrix. 
+// Then copy to the GPU and call cuSolver APIs in the root process. 
+// Finally the eigenvalues and eigenvectors would be scattered.
+
+void Pdiag_Double::rootGather_double(double *mat_loc, double *mat_glb){
+    
+	const Parallel_Orbitals* pv = this->ParaV;
+
+	int myid;
+    MPI_Comm_rank(pv->comm_2D, &myid);
+
+	int maxncol;
+	MPI_Allreduce(&pv->ncol, &maxncol, 1, MPI_INT, MPI_MAX, pv->comm_2D);
+
+	int displs[pv->dim1], rcounts[pv->dim1];
+	for (int j = 0; j < pv->dim1; j++ ) 
+	{
+		rcounts[j] = pv->nrow;
+		displs[j] = j * pv->nrow ;
+	}
+
+	for(int i = 0; i < maxncol - 1; i++){
+		MPI_Gatherv(mat_loc + i*pv->nrow, pv->nrow, MPI_DOUBLE, mat_glb + i*pv->dim1*pv->nrow, rcounts, displs, MPI_DOUBLE, 0, pv->comm_2D);   
+	}
+
+	if (GlobalV::NLOCAL % pv->dim1) 
+		for (int j = GlobalV::NLOCAL % pv->dim1; j < pv->dim1; j++ ) rcounts[j] = 0;
+
+	MPI_Gatherv(mat_loc + (maxncol - 1)*pv->nrow, rcounts[myid], MPI_DOUBLE, mat_glb + (maxncol - 1)*pv->dim1*pv->nrow, rcounts, displs, MPI_DOUBLE, 0, pv->comm_2D);  
+
+}
+
+
+
+void Pdiag_Double::rootGather_complex(std::complex<double> *mat_loc, std::complex<double> *mat_glb){
+
+	const Parallel_Orbitals* pv = this->ParaV;
+
+	int myid;
+    MPI_Comm_rank(pv->comm_2D, &myid);
+
+	int maxncol;
+	MPI_Allreduce(&pv->ncol, &maxncol, 1, MPI_INT, MPI_MAX, pv->comm_2D);
+
+	int displs[pv->dim1], rcounts[pv->dim1];
+	for (int j = 0; j < pv->dim1; j++ ) 
+	{
+		rcounts[j] = pv->nrow;
+		displs[j] = j * pv->nrow ;
+	}
+
+	for(int i = 0; i < maxncol - 1; i++){
+		MPI_Gatherv(mat_loc + i*pv->nrow, pv->nrow, MPI_DOUBLE_COMPLEX, mat_glb + i*pv->dim1*pv->nrow, rcounts, displs, MPI_DOUBLE_COMPLEX, 0, pv->comm_2D);   
+	}
+
+	if (GlobalV::NLOCAL % pv->dim1) 
+		for (int j = GlobalV::NLOCAL % pv->dim1; j < pv->dim1; j++ ) rcounts[j] = 0;
+
+	MPI_Gatherv(mat_loc + (maxncol - 1)*pv->nrow, rcounts[myid], MPI_DOUBLE_COMPLEX, mat_glb + (maxncol - 1)*pv->dim1*pv->nrow, rcounts, displs, MPI_DOUBLE_COMPLEX, 0, pv->comm_2D);  
+
+}
+
+void Pdiag_Double::rootDivide_double(double *mat_glb, double *mat_loc){
+
+	const Parallel_Orbitals* pv = this->ParaV;
+
+    int myid;
+    MPI_Comm_rank(pv->comm_2D, &myid);
+    MPI_Status status;
+
+	if (myid == 0){
+		for (int i =0; i < GlobalV::NLOCAL; i++){
+			if ((i % pv->dim1) == 0) continue;
+			MPI_Send(mat_glb + i*pv->nrow, pv->nrow, MPI_DOUBLE, i%pv->dim1, i/pv->dim1, pv->comm_2D);
+		}
+		for (int i =0; i < GlobalV::NLOCAL; i+=pv->dim1)
+			memcpy(mat_loc + i/pv->dim1*pv->nrow, mat_glb + i*pv->nrow, pv->nrow*sizeof(double));
+	} else {
+		for (int i = 0; i < pv->ncol; i++)
+			MPI_Recv(mat_loc + i*pv->nrow, pv->nrow, MPI_DOUBLE, 0, i, pv->comm_2D, &status);
+	}
+
+}
+
+void Pdiag_Double::rootDivide_complex(std::complex<double> *mat_glb, std::complex<double> *mat_loc){
+
+	const Parallel_Orbitals* pv = this->ParaV;
+
+    int myid;
+    MPI_Comm_rank(pv->comm_2D, &myid);
+    MPI_Status status;
+
+	if (myid == 0){
+		for (int i =0; i < GlobalV::NLOCAL; i++){
+			if ((i % pv->dim1) == 0) continue;
+			MPI_Send(mat_glb + i*pv->nrow, pv->nrow, MPI_DOUBLE_COMPLEX, i%pv->dim1, i/pv->dim1, pv->comm_2D);
+		}
+		for (int i =0; i < GlobalV::NLOCAL; i+=pv->dim1)
+			memcpy(mat_loc + i/pv->dim1*pv->nrow, mat_glb + i*pv->nrow, pv->nrow*sizeof(std::complex<double>));
+	} else {
+		for (int i = 0; i < pv->ncol; i++)
+			MPI_Recv(mat_loc + i*pv->nrow, pv->nrow, MPI_DOUBLE_COMPLEX, 0, i, pv->comm_2D, &status);
+	}
+}
+
+#endif	//__CUSOLVER_LCAO
+

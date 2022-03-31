@@ -17,11 +17,17 @@
 #ifdef __DEEPKS
     #include "../module_deepks/LCAO_deepks.h"	//caoyu add 2021-06-04
 #endif
+#ifdef __CUSOLVER_LCAO
+	#include "../src_pdiag/pdiag_double.h"
+#endif
 
 ELEC_scf::ELEC_scf(){}
 ELEC_scf::~ELEC_scf(){}
 
 int ELEC_scf::iter=0;
+#ifdef __CUSOLVER_LCAO
+Diag_Cusolver_gvd Pdiag_Double::diag_cusolver_gvd;	// For expensive gpu initialization only once when using cusolver for lcao
+#endif
 
 void ELEC_scf::scf(const int& istep,
     Local_Orbital_Charge &loc,
@@ -30,7 +36,6 @@ void ELEC_scf::scf(const int& istep,
 {
 	ModuleBase::TITLE("ELEC_scf","scf");
 	ModuleBase::timer::tick("ELEC_scf","scf");
-
 	// (1) calculate ewald energy.
 	// mohan update 2021-02-25
 	H_Ewald_pw::compute_ewald(GlobalC::ucell, GlobalC::pw);
@@ -81,6 +86,19 @@ void ELEC_scf::scf(const int& istep,
 		}
 	}// end GlobalV::OUT_LEVEL
 
+#ifdef __CUSOLVER_LCAO	// pair with finalize() after iter			Xu Shu added 2022-03-25
+	if (GlobalV::KS_SOLVER == "cusolver"){
+		const Parallel_Orbitals* pv = lowf.ParaV;
+		int myid;
+		MPI_Comm_rank(pv->comm_2D, &myid);
+		if (myid == 0){
+			if(GlobalV::GAMMA_ONLY_LOCAL) 
+				Pdiag_Double::diag_cusolver_gvd.init_double(GlobalV::NLOCAL);	
+			else 
+				Pdiag_Double::diag_cusolver_gvd.init_complex(GlobalV::NLOCAL);
+		}
+	}
+#endif //__CUSOLVER_LCAO
 
 	for(iter=1; iter<=GlobalV::SCF_NMAX; iter++)
 	{
@@ -618,6 +636,10 @@ void ELEC_scf::scf(const int& istep,
 			return;
 		}
 	}
+
+#ifdef __CUSOLVER_LCAO
+	if (GlobalV::KS_SOLVER == "cusolver") Pdiag_Double::diag_cusolver_gvd.finalize(); // Xu Shu added 2022-03-25
+#endif// __CUSOLVER_LCAO
 
 	ModuleBase::timer::tick("ELEC_scf","scf");
 	return;

@@ -212,7 +212,7 @@ void test_deepks::folding_nnr(const Test_Deepks::K_Vectors &kv)
 
 								if(nu<0)continue;
 								int iic;
-								if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx")  // save the matrix as column major format
+								if(GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver")  // save the matrix as column major format
 								{
 									iic=mu+nu*ParaO.nrow;
 								}

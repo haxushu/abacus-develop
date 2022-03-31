@@ -51,7 +51,6 @@ void ELEC_cbands_k::cal_bands(const int& istep, LCAO_Hamilt& uhm,
 			pv->nnr);
 	}
 #endif
-
 	// pool parallization in future -- mohan note 2021-02-09
 	for(int ik=0; ik<GlobalC::kv.nks; ik++)
 	{	
