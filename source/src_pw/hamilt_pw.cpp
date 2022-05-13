@@ -15,7 +15,6 @@ Hamilt_PW::Hamilt_PW()
     hpsi = new std::complex<double>[1];
     spsi = new std::complex<double>[1];
     GR_index = new int[1];
-    Bec = new std::complex<double>[1];
 }
 
 Hamilt_PW::~Hamilt_PW()
@@ -23,7 +22,6 @@ Hamilt_PW::~Hamilt_PW()
     delete[] hpsi;
     delete[] spsi;
     delete[] GR_index;
-    delete[] Bec;
 }
 
 
@@ -43,12 +41,10 @@ void Hamilt_PW::allocate(
     delete[] hpsi;
     delete[] spsi;
     delete[] GR_index;
-    delete[] Bec;
 
     this->hpsi = new std::complex<double> [npwx * npol];
     this->spsi = new std::complex<double> [npwx * npol];
     this->GR_index = new int[nrxx];
-    this->Bec = new std::complex<double> [nkb];
 
     ModuleBase::GlobalFunc::ZEROS(this->hpsi, npwx * npol);
     ModuleBase::GlobalFunc::ZEROS(this->spsi, npwx * npol);
@@ -159,6 +155,7 @@ void Hamilt_PW::diagH_subspace(
 
 	// Peize Lin add 2019-03-09
 #ifdef __LCAO
+#ifdef __MPI
 	if(GlobalV::BASIS_TYPE=="lcao_in_pw")
 	{
 		auto add_Hexx = [&](const double alpha)
@@ -171,19 +168,20 @@ void Hamilt_PW::diagH_subspace(
 				}
 			}
 		};
-		if( 5==GlobalC::xcf.iexch_now && 0==GlobalC::xcf.igcx_now )				// HF
+		if(XC_Functional::get_func_type()==4)
 		{
-			add_Hexx(1);
-		}
-		else if( 6==GlobalC::xcf.iexch_now && 8==GlobalC::xcf.igcx_now )			// PBE0
-		{
-			add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
-		}
-		else if( 9==GlobalC::xcf.iexch_now && 12==GlobalC::xcf.igcx_now )			// HSE
-		{
-			add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
+			if ( Exx_Global::Hybrid_Type::HF   == GlobalC::exx_lcao.info.hybrid_type ) // HF
+			{
+				add_Hexx(1);
+			}
+			else if (Exx_Global::Hybrid_Type::PBE0 == GlobalC::exx_lcao.info.hybrid_type || 
+					Exx_Global::Hybrid_Type::HSE  == GlobalC::exx_lcao.info.hybrid_type) // PBE0 or HSE
+			{
+				add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
+			}
 		}
 	}
+#endif
 #endif
 
 	if(GlobalV::NPROC_IN_POOL>1)
@@ -198,6 +196,7 @@ void Hamilt_PW::diagH_subspace(
 
 	// Peize Lin add 2019-03-09
 #ifdef __LCAO
+#ifdef __MPI
 	if("lcao_in_pw"==GlobalV::BASIS_TYPE)
 	{
 		switch(GlobalC::exx_global.info.hybrid_type)
@@ -209,6 +208,7 @@ void Hamilt_PW::diagH_subspace(
 				break;
 		}
 	}
+#endif
 #endif
 
     //=======================
@@ -532,7 +532,7 @@ void Hamilt_PW::h_psi(const std::complex<double> *psi_in, std::complex<double> *
 	// (4) the metaGGA part
 	//------------------------------------
 	ModuleBase::timer::tick("Hamilt_PW","meta");
-	if(GlobalV::DFT_META)
+	if(XC_Functional::get_func_type() == 3)
 	{
 		tmhpsi = hpsi;
 		tmpsi_in = psi_in;

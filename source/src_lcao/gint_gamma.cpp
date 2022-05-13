@@ -14,6 +14,20 @@ Gint_Gamma::Gint_Gamma()
     x3 = new double[1];
     x12 = new double[1];
     x03 = new double[1];
+    
+    sender_index_size = 1;
+	sender_local_index = new int[1];
+    sender_size_process = new int[1];
+    sender_displacement_process = new int[1];
+    sender_size=1;
+    sender_buffer=new double[1];
+
+    receiver_index_size=1;
+    receiver_global_index = new int[1];
+    receiver_size_process = new int[1];
+    receiver_displacement_process = new int[1];
+    receiver_size=1;
+    receiver_buffer=new double[1];
 }
 
 Gint_Gamma::~Gint_Gamma()
@@ -27,6 +41,16 @@ Gint_Gamma::~Gint_Gamma()
     delete[] x3;
     delete[] x12;
     delete[] x03;
+
+    delete[] sender_local_index;
+    delete[] sender_size_process;
+    delete[] sender_displacement_process;
+    delete[] sender_buffer;
+
+    delete[] receiver_global_index;
+    delete[] receiver_size_process;
+    delete[] receiver_displacement_process;
+    delete[] receiver_buffer;
 }
 
 
@@ -69,10 +93,19 @@ void Gint_Gamma::save_atoms_on_grid(const Grid_Technique &gt)
 
 	this->vfactor = std::abs(this->latvec0.Det())/gt.ncxyz;
 
-    //OUT(GlobalV::ofs_running,"Max atom number on sub-FFT-grid",max_size);
-    //GlobalV::ofs_running << "\n dense(DIY) = " << dense;
-    //GlobalV::ofs_running << "\n count_dense = " << (double)count_dense/nxyz*100 << "%";
-    //GlobalV::ofs_running << "\n count_sparse = " << (double)count_sparse/nxyz*100 << "%" << std::endl;
-
     return;
+}
+
+void Gint_Gamma::prepare(
+    const ModuleBase::Matrix3 &latvec_in,
+    const double& lat0_in)
+{
+	ModuleBase::TITLE("Grid_Base_Beta","prepare");
+
+	this->lat0 = lat0_in;
+
+	this->latvec0 = latvec_in;
+	this->latvec0 *= this->lat0;
+	
+	return;
 }

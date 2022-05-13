@@ -4,7 +4,8 @@
 #include "../module_base/global_function.h"
 #include "../module_base/global_variable.h"
 #include "LCAO_hamilt.h"
-
+#include "src_lcao/local_orbital_wfc.h"
+#include "module_esolver/esolver_ks_lcao.h"
 //-----------------------------------------------------------
 // mohan add 2021-02-09
 // This class is used to calculate the band structures
@@ -16,18 +17,21 @@
 class ELEC_cbands_gamma
 {
 
-	friend class ELEC_scf; 
-	friend class ELEC_nscf; 
+    friend class ELEC_scf;
+    friend class ELEC_nscf;
+    friend class ModuleESolver::ESolver_KS_LCAO;
 
-	public:
+public:
 
-	ELEC_cbands_gamma();
-	~ELEC_cbands_gamma();
+    ELEC_cbands_gamma();
+    ~ELEC_cbands_gamma();
 
 
-	private:
+private:
 
-	static void cal_bands(const int &istep, LCAO_Hamilt &uhm);
+    static void cal_bands(const int& istep, LCAO_Hamilt& uhm,
+        Local_Orbital_wfc& lowf,
+        std::vector<ModuleBase::matrix>& dm_gamma);
 
 
 };

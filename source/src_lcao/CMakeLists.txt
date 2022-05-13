@@ -20,7 +20,6 @@ list(APPEND objects
     LCAO_matrix.cpp
     LCAO_nnr.cpp
     LOOP_cell.cpp
-    LOOP_elec.cpp
     LOOP_ions.cpp
     build_st_pw.cpp
     center2_orb-orb11.cpp
@@ -30,7 +29,6 @@ list(APPEND objects
     dftu_relax.cpp
     dftu_yukawa.cpp
     gint_gamma.cpp
-    gint_gamma_common.cpp
     gint_gamma_env.cpp
     gint_gamma_fvl.cpp
     gint_gamma_mull.cpp
@@ -41,10 +39,9 @@ list(APPEND objects
     gint_k_init.cpp
     gint_k_rho.cpp
     gint_k_vl.cpp
+    gint_k_env.cpp
     gint_tools.cpp
     global_fp.cpp
-    grid_base.cpp
-    grid_base_beta.cpp
     grid_bigcell.cpp
     grid_meshball.cpp
     grid_meshcell.cpp
@@ -53,7 +50,7 @@ list(APPEND objects
     local_orbital_charge.cpp
     local_orbital_wfc.cpp
     record_adj.cpp
-    wfc_dm_2d.cpp
+    dm_2d.cpp
     wavefunc_in_pw.cpp
 	H_TDDFT_pw.cpp
     run_md_lcao.cpp
@@ -65,3 +62,7 @@ add_library(
     OBJECT
     ${objects}
 )
+
+IF (BUILD_TESTING)
+  add_subdirectory(test)
+endif()

@@ -4,6 +4,8 @@
 #include "../module_base/global_function.h"
 #include "../module_base/global_variable.h"
 #include "LCAO_hamilt.h"
+#include "src_lcao/local_orbital_wfc.h"
+#include "module_esolver/esolver_ks_lcao.h"
 
 //-----------------------------------------------------------
 // mohan add 2021-02-09
@@ -15,17 +17,18 @@
 class ELEC_evolve
 {
 
-	friend class ELEC_scf;
+    friend class ELEC_scf;
+    friend class ModuleESolver::ESolver_KS_LCAO;
 
-	public:
+public:
 
-	ELEC_evolve();
-	~ELEC_evolve();
+    ELEC_evolve();
+    ~ELEC_evolve();
 
-	// fuxiang add 2021-05-25
+    // fuxiang add 2021-05-25
 
     static int tddft;
-    static double td_dr2;
+    static double td_scf_thr;
     static double td_dt;
     static double td_force_dt;
     static int td_val_elec_01;
@@ -33,18 +36,16 @@ class ELEC_evolve
     static int td_val_elec_03;
     static int td_vext;
     static int td_vext_dire;
-	static double td_timescale;
-	static int td_vexttype;
-	static int td_vextout;
-	static int td_dipoleout;
+    static double td_timescale;
+    static int td_vexttype;
+    static int td_vextout;
+    static int td_dipoleout;
 
 
-	private:
+private:
 
-	static void evolve_psi(const int &istep, LCAO_Hamilt &uhm, std::complex<double>*** wfc);
-	void evolve_complex_matrix(const int &ik, std::complex<double> **c, std::complex<double> **c_init)const;
-	void using_LAPACK_complex(const int &ik, std::complex<double> **c, std::complex<double> **c_init)const;
-	void using_LAPACK_complex_2(const int &ik, std::complex<double>** c, std::complex<double>** c_init)const;
+    static void evolve_psi(const int& istep, LCAO_Hamilt& uhm,
+        Local_Orbital_wfc& lowf);
 
 };
 

@@ -3,38 +3,43 @@
 
 #include "../module_base/global_function.h"
 #include "../module_base/global_variable.h"
+#include "../module_base/matrix.h"
+#include "../module_base/complexmatrix.h"
 #include "../src_parallel/parallel_common.h"
 #include "grid_technique.h"
-#include "wfc_dm_2d.h"
+#include "src_lcao/record_adj.h"
+#include "src_lcao/local_orbital_wfc.h"
+#include "src_lcao/LCAO_hamilt.h"
+#include "module_psi/psi.h"
 
 class Local_Orbital_Charge
 {
-
 	public:
 
 	Local_Orbital_Charge();
 	~Local_Orbital_Charge();
 
 	// mohan added 2021-02-08
-	void allocate_dm_wfc(const Grid_Technique &gt);
-	// sum bands to compute the electron charge density
-	void sum_bands(void);
+    void allocate_dm_wfc(const int& lgd,
+        Local_Orbital_wfc &lowf);
+    // sum bands to compute the electron charge density
+	void sum_bands(LCAO_Hamilt &UHM);
 
 	//-----------------
-	// in DM_gamma.h
+	// in DM_gamma.cpp
 	//-----------------
-	void allocate_gamma(const Grid_Technique &gt);
+	void allocate_gamma(const int &lgd);
 
-	void gamma_file(const Grid_Technique &gt);
-	void cal_dk_gamma_from_2D_pub(void);
-
+    void gamma_file(Local_Orbital_wfc &lowf);
+    void cal_dk_gamma_from_2D_pub(void);
+    //transformation from 2d block to grid, only gamma_only used it now
+    //template<typename T>
+    void dm2dToGrid(const psi::Psi<double>& dm2d, double** dm_grid);
 
 	//-----------------
-	// in DM_k.h
+	// in DM_k.cpp
 	//-----------------
 	void allocate_DM_k(void);
-	
-	void kpt_file(const Grid_Technique &gt);
 
 	// liaochen modify on 2010-3-23 
 	// change its state from private to public
@@ -42,13 +47,49 @@ class Local_Orbital_Charge
 	double** DM_R;
 
 	// whether to printout density matrix
-	int out_dm; // output density matrix or not.
+    static int out_dm; // output density matrix or not.
 
 	void write_dm(const int &is, const int &iter, const std::string &fn, const int &precision);
 
 	void read_dm(const int &is, const std::string &fn);
-	
-	Wfc_Dm_2d wfc_dm_2d;		// Peize Lin test 2019-01-16
+
+    
+    //-----------------
+	// in dm_2d.cpp
+    //-----------------
+    // dm stands for density matrix
+    std::vector<ModuleBase::matrix> dm_gamma;			// dm_gamma[is](iw1,iw2);
+    std::vector<ModuleBase::ComplexMatrix> dm_k;		// dm_k[ik](iw1,iw2);
+
+    void init_dm_2d(void);
+    
+    // dm = wfc.T * wg * wfc.conj(); used in gamma_only
+    void cal_dm(const ModuleBase::matrix& wg,   // wg(ik,ib), cal all dm 
+        std::vector<ModuleBase::matrix>& wfc_gamma,
+        std::vector<ModuleBase::matrix>& dm_gamma);
+
+    // in multi-k,  it is dm(k)
+    void cal_dm(const ModuleBase::matrix& wg,    // wg(ik,ib), cal all dm 
+        std::vector<ModuleBase::ComplexMatrix>& wfc_k,
+        std::vector<ModuleBase::ComplexMatrix>& dm_k);
+
+    // dm(R) = wfc.T * wg * wfc.conj()*kphase, only used in multi-k 
+    void cal_dm_R(
+        std::vector<ModuleBase::ComplexMatrix>& dm_k,
+        Record_adj& ra,
+        double** dm2d);     //output, dm2d[NSPIN][LNNR]
+
+    //-----------------
+	// wavefunctions' pointer
+    //-----------------
+    Local_Orbital_wfc* LOWF;
+    //-----------------
+	// Parallel Variables' pointer
+    //-----------------
+    const Parallel_Orbitals* ParaV;
+
+    //temporary set it to public for ElecStateLCAO class, would be refactor later
+    void cal_dk_k(const Grid_Technique &gt);
 
 private:
 
@@ -58,8 +99,6 @@ private:
 	bool init_DM_R;
 
 	void cal_dk_gamma(void);
-
-	void cal_dk_k(const Grid_Technique &gt);
 
 	// mohan add 2010-09-06
 	int lgd_last;// sub-FFT-mesh orbitals number in previous step.
@@ -87,8 +126,9 @@ private:
     int *receiver_displacement_process;
     double* receiver_buffer;
 
+#ifdef __MPI
     int setAlltoallvParameter(MPI_Comm comm_2D, int blacs_ctxt, int nblk);
-
+#endif
     void cal_dk_gamma_from_2D(void);
 };
 

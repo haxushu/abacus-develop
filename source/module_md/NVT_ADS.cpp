@@ -7,20 +7,17 @@
 
 NVT_ADS::NVT_ADS(MD_parameters& MD_para_in, UnitCell_pseudo &unit_in) : Verlet(MD_para_in, unit_in)
 {
-    // convert to a.u. unit
-    mdp.tfreq *= ModuleBase::AU_to_FS;
-
-    nraise = mdp.tfreq * mdp.dt;
+    nraise = mdp.md_tfreq * mdp.md_dt;
 }
 
 NVT_ADS::~NVT_ADS(){}
 
-void NVT_ADS::setup()
+void NVT_ADS::setup(ModuleESolver::ESolver *p_ensolve)
 {
     ModuleBase::TITLE("NVT_ADS", "setup");
     ModuleBase::timer::tick("NVT_ADS", "setup");
 
-    Verlet::setup();
+    Verlet::setup(p_ensolve);
 
     ModuleBase::timer::tick("NVT_ADS", "setup");
 }
@@ -47,9 +44,9 @@ void NVT_ADS::second_half()
         double deviation;
         for(int i=0; i<ucell.nat; ++i)
         {
-            if(rand()/double(RAND_MAX) <= 1.0/nraise)
+            if(rand()/double(RAND_MAX) <= nraise)
             {
-                deviation = sqrt(mdp.tlast / allmass[i]);
+                deviation = sqrt(mdp.md_tlast / allmass[i]);
                 for(int k=0; k<3; ++k)
                 {
                     if(ionmbl[i][k]) 
@@ -68,9 +65,9 @@ void NVT_ADS::second_half()
     ModuleBase::timer::tick("NVT_ADS", "second_half");
 }
 
-void NVT_ADS::outputMD()
+void NVT_ADS::outputMD(std::ofstream &ofs)
 {
-    Verlet::outputMD();
+    Verlet::outputMD(ofs);
 }
 
 void NVT_ADS::write_restart()

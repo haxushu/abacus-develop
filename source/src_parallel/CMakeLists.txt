@@ -4,7 +4,6 @@ list(APPEND objects
     parallel_global.cpp
     parallel_grid.cpp
     parallel_kpoints.cpp
-    parallel_orbitals.cpp
     parallel_pw.cpp
     parallel_reduce.cpp
     subgrid_oper.cpp
@@ -15,3 +14,7 @@ add_library(
     OBJECT
     ${objects}
 )
+
+IF (BUILD_TESTING)
+  add_subdirectory(test)
+endif()

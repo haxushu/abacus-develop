@@ -47,7 +47,7 @@ Charge::~Charge()
 			delete[] rhog[i];
 			delete[] rho_save[i];
 			delete[] rhog_save[i];
-			if(GlobalV::DFT_META)
+			if(XC_Functional::get_func_type() == 3)
 			{
 				delete[] kin_r[i];
 				delete[] kin_r_save[i];
@@ -59,7 +59,7 @@ Charge::~Charge()
 		delete[] rhog_save;
     	delete[] rho_core;
 		delete[] rhog_core;
-		if(GlobalV::DFT_META)
+		if(XC_Functional::get_func_type() == 3)
 		{
 			delete[] kin_r;
 			delete[] kin_r_save;
@@ -90,7 +90,7 @@ void Charge::allocate(const int &nspin_in, const int &nrxx_in, const int &ngmc_i
 	rhog = new std::complex<double>*[nspin];
 	rho_save = new double*[nspin];
 	rhog_save = new std::complex<double>*[nspin];
-	if(GlobalV::DFT_META)
+	if(XC_Functional::get_func_type() == 3)
 	{
 		kin_r = new double*[nspin];
 		kin_r_save = new double*[nspin];
@@ -106,7 +106,7 @@ void Charge::allocate(const int &nspin_in, const int &nrxx_in, const int &ngmc_i
 		ModuleBase::GlobalFunc::ZEROS(rhog[is], ngmc);
 		ModuleBase::GlobalFunc::ZEROS(rho_save[is], nrxx);
 		ModuleBase::GlobalFunc::ZEROS(rhog_save[is], ngmc);
-		if(GlobalV::DFT_META)
+		if(XC_Functional::get_func_type() == 3)
 		{
 			kin_r[is] = new double[nrxx];
 			ModuleBase::GlobalFunc::ZEROS(kin_r[is], nrxx);
@@ -212,13 +212,11 @@ void Charge::atomic_rho(const int spin_number_need, double** rho_in)const		// Pe
 		// check the start magnetization
 		const int startmag_type = [&]()->int
 		{
-			if(GlobalV::NSPIN==4)		//zhengdy-soc, type 2 is still wrong.
-				return 1;
 			for(int it=0; it<GlobalC::ucell.ntype; it++)
-				for(int ia=0; ia<GlobalC::ucell.atoms[it].na; ia++)
-					if(GlobalC::ucell.atoms[it].mag[ia]!=0.0)
-						return 2;
-			return 1;
+			{
+				if( GlobalC::ucell.magnet.start_magnetization[it] != 0.0) return 1;
+			}
+			return 2;
 		}();
 		ModuleBase::GlobalFunc::OUT(GlobalV::ofs_warning,"startmag_type",startmag_type);
 
@@ -511,7 +509,7 @@ void Charge::atomic_rho(const int spin_number_need, double** rho_in)const		// Pe
 			rho_in[is][ir] = rho_in[is][ir] / ne_tot * nelec;
 
 	//wenfei 2021-7-29 : initial tau = 3/5 rho^2/3, Thomas-Fermi
-	if(GlobalV::DFT_META)
+	if(XC_Functional::get_func_type() == 3)
 	{
 		const double pi = 3.141592653589790;
 		double fact = (3.0/5.0)*pow(3.0*pi*pi,2.0/3.0);
@@ -725,7 +723,7 @@ void Charge::sum_band(void)
 	for(int is=0; is<GlobalV::NSPIN; is++)
 	{
 		ModuleBase::GlobalFunc::ZEROS(rho[is], GlobalC::pw.nrxx);
-		if (GlobalV::DFT_META)
+		if (XC_Functional::get_func_type() == 3)
 		{
 			ModuleBase::GlobalFunc::ZEROS(kin_r[is], GlobalC::pw.nrxx);	
 		}
@@ -760,7 +758,7 @@ void Charge::sum_band_k(void)
 				///
 				///only occupied band should be calculated.
 				///
-				if(GlobalC::wf.wg(ik, ibnd)<1e-8) continue;
+				if(GlobalC::wf.wg(ik, ibnd)<ModuleBase::threshold_wg) continue;
 				GlobalC::en.eband += GlobalC::wf.ekb[ik][ibnd] * GlobalC::wf.wg(ik, ibnd);
 				ModuleBase::GlobalFunc::ZEROS( porter, GlobalC::pw.nrxx );
 				for (int ig = 0;ig < GlobalC::kv.ngk[ik] ; ig++)
@@ -818,7 +816,7 @@ void Charge::sum_band_k(void)
 			///
 			///only occupied band should be calculated.
 			///
-			if(GlobalC::wf.wg(ik, ibnd)<1e-8) continue;
+			if(GlobalC::wf.wg(ik, ibnd)<ModuleBase::threshold_wg) continue;
 			GlobalC::en.eband += GlobalC::wf.ekb[ik][ibnd] * GlobalC::wf.wg(ik, ibnd);
 			//std::cout << "\n ekb = " << GlobalC::wf.ekb[ik][ibnd] << " wg = " << GlobalC::wf.wg(ik, ibnd);
 
@@ -840,7 +838,7 @@ void Charge::sum_band_k(void)
 			}
 
 			//kinetic energy density
-			if (GlobalV::DFT_META)
+			if (XC_Functional::get_func_type() == 3)
 			{
 				for (int j=0; j<3; j++)
 				{
@@ -973,7 +971,7 @@ void Charge::rho_mpi(void)
 	double *tau_tot;
 	double *tau_tot_aux;
 
-	if(GlobalV::DFT_META)
+	if(XC_Functional::get_func_type() == 3)
 	{
     	tau_tmp = new double[GlobalC::pw.nrxx];
 	    tau_tot = new double[GlobalC::pw.ncxyz];
@@ -984,19 +982,19 @@ void Charge::rho_mpi(void)
     for (int is=0; is< GlobalV::NSPIN; is++)
     {
         ModuleBase::GlobalFunc::ZEROS(rho_tot, GlobalC::pw.ncxyz);
-		if(GlobalV::DFT_META) ModuleBase::GlobalFunc::ZEROS(tau_tot, GlobalC::pw.ncxyz);
+		if(XC_Functional::get_func_type() == 3) ModuleBase::GlobalFunc::ZEROS(tau_tot, GlobalC::pw.ncxyz);
 
 		for (ir=0;ir<GlobalC::pw.nrxx;ir++)
 		{
 			rho_tmp[ir] = this->rho[is][ir] / static_cast<double>(GlobalV::NPROC_IN_POOL);
-			if(GlobalV::DFT_META)
+			if(XC_Functional::get_func_type() == 3)
 			{
 				tau_tmp[ir] = this->kin_r[is][ir] / static_cast<double>(GlobalV::NPROC_IN_POOL);
 			}
 		}
 
         MPI_Allgatherv(rho_tmp, GlobalC::pw.nrxx, MPI_DOUBLE, rho_tot, rec, dis, MPI_DOUBLE, POOL_WORLD);
-		if(GlobalV::DFT_META)
+		if(XC_Functional::get_func_type() == 3)
 		{
         	MPI_Allgatherv(tau_tmp, GlobalC::pw.nrxx, MPI_DOUBLE, tau_tot, rec, dis, MPI_DOUBLE, POOL_WORLD);
 		}
@@ -1005,7 +1003,7 @@ void Charge::rho_mpi(void)
         // this is the most complicated part !!
         //=================================================================
         ModuleBase::GlobalFunc::ZEROS(rho_tot_aux, GlobalC::pw.ncxyz);
-		if(GlobalV::DFT_META)
+		if(XC_Functional::get_func_type() == 3)
 		{
         	ModuleBase::GlobalFunc::ZEROS(tau_tot_aux, GlobalC::pw.ncxyz);
 		}
@@ -1048,7 +1046,7 @@ void Charge::rho_mpi(void)
 					// -------------------------------------------------
                     rho_tot_aux[GlobalC::pw.ncz*ir    + start_z[ip]      + iz]
                       = rho_tot[num_z[ip]*ir + start_z[ip]*ncxy + iz];
-					if(GlobalV::DFT_META)
+					if(XC_Functional::get_func_type() == 3)
 					{
                     	tau_tot_aux[GlobalC::pw.ncz*ir    + start_z[ip]      + iz]
                       	  = tau_tot[num_z[ip]*ir + start_z[ip]*ncxy + iz];
@@ -1062,14 +1060,14 @@ void Charge::rho_mpi(void)
 		if(GlobalV::CALCULATION=="scf-sto" || GlobalV::CALCULATION=="relax-sto" || GlobalV::CALCULATION=="md-sto") //qinarui add it temporarily.
 		{
 			MPI_Allreduce(rho_tot_aux,rho_tot,GlobalC::pw.ncxyz,MPI_DOUBLE,MPI_SUM,POOL_WORLD);
-			if(GlobalV::DFT_META)
+			if(XC_Functional::get_func_type() == 3)
 			{
 				MPI_Allreduce(tau_tot_aux,tau_tot,GlobalC::pw.ncxyz,MPI_DOUBLE,MPI_SUM,POOL_WORLD);
 			}
 		}
 		else
         MPI_Allreduce(rho_tot_aux,rho_tot,GlobalC::pw.ncxyz,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
-		if(GlobalV::DFT_META)
+		if(XC_Functional::get_func_type() == 3)
 		{
    	    	MPI_Allreduce(tau_tot_aux,tau_tot,GlobalC::pw.ncxyz,MPI_DOUBLE,MPI_SUM,MPI_COMM_WORLD);
 		}
@@ -1082,7 +1080,7 @@ void Charge::rho_mpi(void)
             for (iz=0;iz<num_z[GlobalV::RANK_IN_POOL];iz++)
             {
                 this->rho[is][num_z[GlobalV::RANK_IN_POOL]*ir+iz] = rho_tot[GlobalC::pw.ncz*ir + start_z[GlobalV::RANK_IN_POOL] + iz ];
-				if(GlobalV::DFT_META)
+				if(XC_Functional::get_func_type() == 3)
 				{
                 	this->kin_r[is][num_z[GlobalV::RANK_IN_POOL]*ir+iz] = tau_tot[GlobalC::pw.ncz*ir + start_z[GlobalV::RANK_IN_POOL] + iz ];
 				}	
@@ -1093,7 +1091,7 @@ void Charge::rho_mpi(void)
     delete[] rho_tot;
     delete[] rho_tmp;
     
-	if(GlobalV::DFT_META)
+	if(XC_Functional::get_func_type() == 3)
 	{
 		delete[] tau_tot_aux;
     	delete[] tau_tot;
@@ -1115,7 +1113,7 @@ void Charge::save_rho_before_sum_band(void)
 	for(int is=0; is<GlobalV::NSPIN; is++)
 	{
     	ModuleBase::GlobalFunc::DCOPY( rho[is], rho_save[is], GlobalC::pw.nrxx);
-    	if(GlobalV::DFT_META) ModuleBase::GlobalFunc::DCOPY( kin_r[is], kin_r_save[is], GlobalC::pw.nrxx);
+    	if(XC_Functional::get_func_type() == 3) ModuleBase::GlobalFunc::DCOPY( kin_r[is], kin_r_save[is], GlobalC::pw.nrxx);
     }
     return;
 }
@@ -1222,6 +1220,7 @@ void Charge::cal_nelec(void)
 	// calculate number of bands (setup.f90)
 	//=======================================
 	double occupied_bands = static_cast<double>(nelec/ModuleBase::DEGSPIN);	
+	if(GlobalV::LSPINORB==1) occupied_bands = static_cast<double>(nelec);
 
 	if( (occupied_bands - std::floor(occupied_bands)) > 0.0 )
 	{

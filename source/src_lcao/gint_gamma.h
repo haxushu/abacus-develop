@@ -9,7 +9,6 @@
 #include "gint_tools.h"
 #include "../module_base/global_function.h"
 #include "../module_base/global_variable.h"
-#include "grid_base_beta.h"
 #include "grid_technique.h"
 #include "LCAO_matrix.h"
 #include <omp.h>
@@ -20,7 +19,7 @@
 // Numerical Orbitals
 //=========================================================
 
-class Gint_Gamma : public Grid_Base_Beta
+class Gint_Gamma
 {
 	public:
 
@@ -28,24 +27,33 @@ class Gint_Gamma : public Grid_Base_Beta
 	~Gint_Gamma();
 
 	// (1) calculate the H matrix in terms of effective potentials
-	void cal_vlocal( const double*const vlocal);
+	void cal_vlocal( const double*const vlocal, LCAO_Matrix &lm);
 
 	// (2) calculate charge density
-	double cal_rho(const double*const*const*const DM);
+	double cal_rho(double*** DM_in);
 
 	// (3) calcualte the forces related to grid
-	void cal_force( const double*const vlocal);
+	void cal_force(double*** DM_in, const double*const vlocal,
+			ModuleBase::matrix& force, ModuleBase::matrix& stress,
+			const bool is_force, const bool is_stress);
 
 	// (4) calcualte the envelope function
 	void cal_env(const double* wfc, double* rho);
 
 	// (5) calculate the Mulliken charge
 	void cal_mulliken(double** mulliken);
+	
+	void prepare( 
+		const ModuleBase::Matrix3 &latvec_in, 
+        const double& lat0_in);
 
+private:
 
-	private:	
-
-	double* transformer;
+	double vfactor;
+	ModuleBase::Matrix3 latvec0;
+	double lat0;
+    double***  DM;   //pointer to LOC.DM
+    double* transformer;
 	double psiv1;
 	double psiv2;
 	double* ylm1;
@@ -65,7 +73,25 @@ class Gint_Gamma : public Grid_Base_Beta
 	double* x03;
 	int *iq;
 
-	void save_atoms_on_grid(const Grid_Technique &gt);
+    ///===============================
+    /// Use MPI_Alltoallv to convert a grid distributed matrix
+    /// to 2D - block cyclic distributed matrix.
+    ///===============================
+    int sender_index_size;
+    int *sender_local_index;
+    int sender_size;
+    int *sender_size_process;
+    int *sender_displacement_process;
+    double* sender_buffer;
+
+    int receiver_index_size;
+    int *receiver_global_index;
+    int receiver_size;
+    int *receiver_size_process;
+    int *receiver_displacement_process;
+    double* receiver_buffer;
+    
+    void save_atoms_on_grid(const Grid_Technique& gt);
 
 	// for calculation of < phi_i | Vlocal | phi_j >
 	// Input:	vlocal[ir]
@@ -86,7 +112,9 @@ class Gint_Gamma : public Grid_Base_Beta
 
 	// for calculatin of < dphi_i | Vlocal | phi_j > for foce calculation
 	// on regular FFT real space grid.
-	void gamma_force(const double*const vlocal) const;
+	void gamma_force(const double*const*const*const DM, const double*const vlocal,
+			ModuleBase::matrix& force, ModuleBase::matrix& stress,
+			const bool is_force, const bool is_stress);
 
 	void cal_meshball_vlocal(
 		const int na_grid,  						// how many atoms on this (i,j,k) grid
@@ -112,10 +140,33 @@ class Gint_Gamma : public Grid_Base_Beta
 		const int*const vindex,							// vindex[GlobalC::pw.bxyz]
 		const double*const*const*const DM,				// DM[GlobalV::NSPIN][lgd_now][lgd_now]
 		Gint_Tools::Array_Pool<double> &rho) const;		// rho[GlobalV::NSPIN][GlobalC::pw.nrxx]
-	
-	// extract the local potentials.
-	// vldr3[GlobalC::pw.bxyz]
-	double* get_vldr3(const double*const vlocal, const int ncyz, const int ibx, const int jby, const int kbz) const;
+
+	void cal_meshball_force(
+		const int grid_index,
+		const int na_grid,  					    // how many atoms on this (i,j,k) grid
+		const int*const block_size, 			    // block_size[na_grid],	number of columns of a band
+		const int*const block_index,		    	// block_index[na_grid+1], count total number of atomis orbitals
+		const double*const*const psir_vlbr3_DM,	    // psir_vlbr3[GlobalC::pw.bxyz][LD_pool]
+		const double*const*const dpsir_x,	    // psir_vlbr3[GlobalC::pw.bxyz][LD_pool]
+		const double*const*const dpsir_y,	    // psir_vlbr3[GlobalC::pw.bxyz][LD_pool]
+		const double*const*const dpsir_z,	    // psir_vlbr3[GlobalC::pw.bxyz][LD_pool]
+		ModuleBase::matrix &force
+	);
+
+	void cal_meshball_stress(
+		const int na_grid,  					    // how many atoms on this (i,j,k) grid
+		const int*const block_index,		    	// block_index[na_grid+1], count total number of atomis orbitals
+		const double*const*const psir_vlbr3_DM,
+		const double*const*const dpsir_xx,
+		const double*const*const dpsir_xy,
+		const double*const*const dpsir_xz,
+		const double*const*const dpsir_yy,
+		const double*const*const dpsir_yz,
+		const double*const*const dpsir_zz,
+		ModuleBase::matrix &stress
+	);
+
+    void vl_grid_to_2D(const Gint_Tools::Array_Pool<double>& GridVlocal, LCAO_Matrix& lm);
 };
 
 #endif

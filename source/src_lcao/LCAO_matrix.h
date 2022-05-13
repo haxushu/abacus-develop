@@ -5,7 +5,7 @@
 #include "../module_base/global_variable.h"
 #include "../module_base/vector3.h"
 #include "../module_base/complexmatrix.h"
-#include "../src_parallel/parallel_orbitals.h"
+#include "../module_orbital/parallel_orbitals.h"
 
 // add by jingan for map<> in 2021-12-2, will be deleted in the future
 #include "../src_ri/abfs-vector3_order.h"
@@ -20,9 +20,15 @@ class LCAO_Matrix
     LCAO_Matrix();
     ~LCAO_Matrix();
 
-    void divide_HS_in_frag(const bool isGamma, Parallel_Orbitals &po);
+    void divide_HS_in_frag(const bool isGamma, Parallel_Orbitals& pv);
+    
+    // folding the fixed Hamiltonian (T+Vnl) if
+	// k-point algorithm is used.
+	void folding_fixedH(const int &ik);
 
-    private:
+    Parallel_Orbitals *ParaV;
+
+private:
 
     void allocate_HS_gamma(const long &nloc);
 
@@ -166,7 +172,7 @@ class LCAO_Matrix
     double* DHloc_fixed_33;
 
 
-    void set_HSgamma(const int &iw1_all, const int &iw2_all, const double &v, const char &dtype);
+    void set_HSgamma(const int &iw1_all, const int &iw2_all, const double &v, const char &dtype, double* HSloc);
     void set_HSk(const int &iw1_all, const int &iw2_all, const std::complex<double> &v, const char &dtype, const int spin = 0);
 
     void set_force (const int& iw1_all, const int& iw2_all, const double& vx, const double& vy, 

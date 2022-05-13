@@ -2,6 +2,8 @@
 #define GRID_TECHNIQUE_H
 
 #include "grid_meshball.h"
+#include "grid_index.h"
+#include "module_orbital/parallel_orbitals.h"
 
 // Author: mohan
 // Date: 2009-10-17
@@ -48,8 +50,25 @@ class Grid_Technique : public Grid_MeshBall
 	int* trace_beta; // sunzhiyuan add, trace to nonlocal projector beta.
 
 	int* atomip; // atom index in this processor
-	
-	// public functions
+
+    //---------------------------------------
+	// nnrg: number of matrix elements on
+	// each processor's real space grid.
+	// use: GridT.in_this_processor
+	//---------------------------------------
+	int nnrg;
+	int *nlocdimg;
+	int *nlocstartg;
+    
+    int* nad; // number of adjacent atoms for each atom.
+	int **find_R2;
+	int **find_R2st;
+    bool allocate_find_R2;
+
+	//indexes for nnrg -> orbital index + R index
+	std::vector<gridIntegral::gridIndex> nnrg_index;
+    
+    // public functions
 	public:
 
 	Grid_Technique();
@@ -68,9 +87,30 @@ class Grid_Technique : public Grid_MeshBall
 			const int &nbxx_in,
 			const int &nbzp_start_in,
 			const int &nbzp_in);
+            
+    /// number of elements(basis-pairs) in this processon
+    /// on all adjacent atoms-pairs(Grid division)
+    void cal_nnrg(Parallel_Orbitals* pv);
+    int cal_RindexAtom(const int& u1, const int& u2, const int& u3, const int& iat2) const;
+    
+private:
 
-	private:
-		
+    void cal_max_box_index(void);
+    
+    int maxB1;
+    int maxB2;
+	int maxB3;
+
+	int minB1;
+	int minB2;
+	int minB3;
+
+	int nB1;
+	int nB2;
+	int nB3;
+
+    int nbox;
+
 	// atoms on meshball
 	void init_atoms_on_grid(void);
 	void init_atoms_on_grid2(const int* index2normal);

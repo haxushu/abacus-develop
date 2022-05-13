@@ -1,12 +1,10 @@
 #include "run_md_lcao.h"
-#include "LOOP_elec.h"
-#include "LCAO_nnr.h"
 #include "FORCE_STRESS.h"
 #include "../src_pw/global.h"
 #include "../src_pw/vdwd2.h"
 #include "../src_pw/vdwd2_parameters.h"
 #include "../src_pw/vdwd3_parameters.h"
-#include "../src_parallel/parallel_orbitals.h"
+#include "../module_orbital/parallel_orbitals.h"
 #include "../src_pdiag/pdiag_double.h"
 #include "../src_io/write_HS.h"
 #include "../src_io/cal_r_overlap_R.h"
@@ -30,38 +28,17 @@ Run_MD_LCAO::Run_MD_LCAO()
 
 Run_MD_LCAO::~Run_MD_LCAO(){}
 
-
-void Run_MD_LCAO::opt_cell(void)
+void Run_MD_LCAO::opt_cell(ModuleESolver::ESolver *p_esolver)
 {
 	ModuleBase::TITLE("Run_MD_LCAO","opt_cell");
 
-    // Initialize the local wave functions.
-    // npwx, eigenvalues, and weights
-    // npwx may change according to cell change
-    // this function belongs to cell LOOP
-    GlobalC::wf.allocate_ekb_wg(GlobalC::kv.nks);
-
-    // Initialize the FFT.
-    // this function belongs to cell LOOP
-    GlobalC::UFFT.allocate();
-
-    // output is GlobalC::ppcell.vloc 3D local pseudopotentials
-    // this function belongs to cell LOOP
-    GlobalC::ppcell.init_vloc(GlobalC::pw.nggm, GlobalC::ppcell.vloc);
-
-    // Initialize the sum of all local potentials.
-    // if ion_step==0, read in/initialize the potentials
-    // this function belongs to ions LOOP
-    int ion_step=0;
-    GlobalC::pot.init_pot(ion_step, GlobalC::pw.strucFac);
-
-	
-	opt_ions();
-	return;
+    opt_ions(p_esolver);
+    
+    return;
 }
 
 
-void Run_MD_LCAO::opt_ions(void)
+void Run_MD_LCAO::opt_ions(ModuleESolver::ESolver *p_esolver)
 {
     ModuleBase::TITLE("Run_MD_LCAO","opt_ions"); 
     ModuleBase::timer::tick("Run_MD_LCAO","opt_ions"); 
@@ -81,40 +58,42 @@ void Run_MD_LCAO::opt_ions(void)
     //Charge_Extrapolation
     CE.allocate_ions();
 
-    // determine the mdtype
+    // determine the md_type
     Verlet *verlet;
-    if(INPUT.mdp.mdtype == -1)
+    if(INPUT.mdp.md_type == -1)
     {
         verlet = new FIRE(INPUT.mdp, GlobalC::ucell); 
     }
-    else if(INPUT.mdp.mdtype == 0)
+    else if(INPUT.mdp.md_type == 0)
     {
         verlet = new NVE(INPUT.mdp, GlobalC::ucell); 
     }
-    else if(INPUT.mdp.mdtype == 1)
-    {
-        verlet = new NVT_ADS(INPUT.mdp, GlobalC::ucell);
-    }
-    else if(INPUT.mdp.mdtype == 2)
+    else if(INPUT.mdp.md_type == 1)
     {
         verlet = new NVT_NHC(INPUT.mdp, GlobalC::ucell);
     }
-    else if(INPUT.mdp.mdtype == 3)
+    else if(INPUT.mdp.md_type == 2)
     {
         verlet = new Langevin(INPUT.mdp, GlobalC::ucell);
     }
-    else if(INPUT.mdp.mdtype == 4)
+    else if(INPUT.mdp.md_type == 3)
+    {
+        verlet = new NVT_ADS(INPUT.mdp, GlobalC::ucell);
+    }
+    else if(INPUT.mdp.md_type == 4)
     {
         verlet = new MSST(INPUT.mdp, GlobalC::ucell); 
         cellchange = true;
     }
 
     // md cycle
-    while ((verlet->step_ + verlet->step_rst_) <= GlobalV::NSTEP && !verlet->stop)
+    while ((verlet->step_ + verlet->step_rst_) <= GlobalV::MD_NSTEP && !verlet->stop)
     {
+        Print_Info::print_screen(0, 0, verlet->step_ + verlet->step_rst_);
+
         if(verlet->step_ == 0)
         {
-            verlet->setup();
+            verlet->setup(p_esolver);
         }
         else
         {
@@ -143,7 +122,7 @@ void Run_MD_LCAO::opt_ions(void)
             GlobalC::pot.init_pot(verlet->step_, GlobalC::pw.strucFac);
 
             // update force and virial due to the update of atom positions
-            MD_func::force_virial(verlet->step_, verlet->mdp, verlet->ucell, verlet->potential, verlet->force, verlet->virial);
+            MD_func::force_virial(p_esolver, verlet->step_, verlet->mdp, verlet->ucell, verlet->potential, verlet->force, verlet->virial);
 
             verlet->second_half();
 
@@ -152,15 +131,15 @@ void Run_MD_LCAO::opt_ions(void)
             verlet->stress += verlet->virial;
         }
 
-        if((verlet->step_ + verlet->step_rst_) % verlet->mdp.dumpfreq == 0)
+        if((verlet->step_ + verlet->step_rst_) % verlet->mdp.md_dumpfreq == 0)
         {
-            Print_Info::print_screen(0, 0, verlet->step_ + verlet->step_rst_);
-            verlet->outputMD();
+            // Print_Info::print_screen(0, 0, verlet->step_ + verlet->step_rst_);
+            verlet->outputMD(GlobalV::ofs_running);
 
             MD_func::MDdump(verlet->step_ + verlet->step_rst_, verlet->ucell, verlet->virial, verlet->force);
         }
 
-        if((verlet->step_ + verlet->step_rst_) % verlet->mdp.rstfreq == 0)
+        if((verlet->step_ + verlet->step_rst_) % verlet->mdp.md_restartfreq == 0)
         {
             verlet->ucell.update_vel(verlet->vel);
             std::stringstream file;
@@ -176,7 +155,7 @@ void Run_MD_LCAO::opt_ions(void)
         verlet->step_++;
     }
 
-    if (GlobalC::pot.out_potential == 2)
+    if (GlobalC::pot.out_pot == 2)
     {
         std::stringstream ssp;
         std::stringstream ssp_ave;
@@ -191,13 +170,13 @@ void Run_MD_LCAO::opt_ions(void)
     GlobalV::ofs_running << " --------------------------------------------\n\n" << std::endl;
 
 	// mohan update 2021-02-10
-    GlobalC::LOWF.orb_con.clear_after_ions(GlobalC::UOT, GlobalC::ORB, GlobalV::out_descriptor, GlobalC::ucell.infoNL.nproj);
 
     ModuleBase::timer::tick("Run_MD_LCAO","opt_ions"); 
     return;
 }
 
 void Run_MD_LCAO::md_force_virial(
+    ModuleESolver::ESolver *p_esolver,
     const int &istep,
     const int& numIon, 
     double &potential, 
@@ -233,17 +212,15 @@ void Run_MD_LCAO::md_force_virial(
     }
 
     // solve electronic structures in terms of LCAO
-	// mohan add 2021-02-09
-    LOOP_elec LOE;
-	LOE.solve_elec_stru(istep+1);
+    // mohan add 2021-02-09
+    p_esolver->Run(istep, GlobalC::ucell);
 
     //to call the force of each atom
 	ModuleBase::matrix fcs;//temp force matrix
-	Force_Stress_LCAO FSL;
-	FSL.allocate (); 
-	FSL.getForceStress(GlobalV::FORCE, GlobalV::STRESS, GlobalV::TEST_FORCE, GlobalV::TEST_STRESS, fcs, virial);
-
-	for(int ion=0; ion<numIon; ++ion)
+    p_esolver->cal_Force(fcs);
+    p_esolver->cal_Stress(virial);
+    
+    for (int ion = 0; ion < numIon; ++ion)
     {
 		force[ion].x = fcs(ion, 0)/2.0;
 		force[ion].y = fcs(ion, 1)/2.0;

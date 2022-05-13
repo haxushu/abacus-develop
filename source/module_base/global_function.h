@@ -153,11 +153,13 @@ static void READ_VALUE(std::ifstream &ifs, T &v)
     return;
 }
 
-bool SCAN_BEGIN(std::ifstream &ifs, const std::string &TargetName, const bool restart=1);
+bool SCAN_BEGIN(std::ifstream &ifs, const std::string &TargetName, const bool restart=1, const bool ifwarn=true);
+// ifwarn: whether to call GlobalV::ofs_warning when the TargetName is not found, used to avoid invalid warning.
 // Mohan warning : the last term can't be written as const bool &restart,
 // I don't know why.
 
-void SCAN_END(std::ifstream &ifs, const std::string &TargetName);
+void SCAN_END(std::ifstream &ifs, const std::string &TargetName, const bool ifwarn=true);
+// ifwarn: whether to call GlobalV::ofs_warning when the TargetName is not found, used to avoid invalid warning.
 
 template<class T>
 static inline void DCOPY( const T &a, T &b, const int &dim)
@@ -316,6 +318,22 @@ static inline void FREE_MUL_PTR(T_element* v, const T_N_first N_first, const T_N
 		FREE_MUL_PTR(v[i],N_tail...);
 	free(v);
 	v = nullptr;
+}
+
+double ddot_real(
+        const int & dim,
+        const std::complex<double>* psi_L,
+        const std::complex<double>* psi_R,
+        const bool reduce = true) ;
+
+//==========================================================
+// GLOBAL FUNCTION :
+// NAME : IS_COLUMN_MAJOR_KS_SOLVER
+// check ks_solver requires column major or not
+//==========================================================
+static inline bool IS_COLUMN_MAJOR_KS_SOLVER()
+{
+    return GlobalV::KS_SOLVER=="genelpa" || GlobalV::KS_SOLVER=="scalapack_gvx" || GlobalV::KS_SOLVER=="cusolver";
 }
 
 }//namespace GlobalFunc

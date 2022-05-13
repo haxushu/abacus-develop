@@ -13,7 +13,8 @@ project(ABACUS
 
 option(ENABLE_DEEPKS "Enable DeePKS functionality" OFF)
 option(ENABLE_LIBXC "Enable LibXC functionality" OFF)
-option(USE_CUDA "Enable support to CUDA." OFF)
+option(USE_CUDA "Enable support to CUDA for PW." OFF)
+option(USE_CUSOLVER_LCAO "Enable support to CUSOLVER for LCAO." OFF)
 option(USE_ROCM "Enable support to ROCm." OFF)
 option(USE_OPENMP " Enable OpenMP in abacus." ON)
 option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
@@ -58,21 +59,32 @@ set(CMAKE_CXX_STANDARD 11)
 include(CheckLanguage)
 check_language(CUDA)
 if(CMAKE_CUDA_COMPILER)
-  if(NOT DEFINED USE_CUDA)
-    message("CUDA components detected. \nWill build the CUDA version of ABACUS.")
-    set(USE_CUDA ON)
+  if(NOT DEFINED USE_CUDA OR NOT DEFINED USE_CUSOLVER_LCAO)
+    if (NOT DEFINED USE_CUDA AND NOT DEFINED USE_CUSOLVER_LCAO)
+      message("CUDA components detected. \nWill build the CUDA for PW version of ABACUS by default.")
+      set(USE_CUDA ON)
+      set(USE_CUSOLVER_LCAO OFF)
+    elseif (NOT DEFINED USE_CUDA)
+      set(USE_CUDA OFF)
+    else()
+      set(USE_CUSOLVER_LCAO OFF)
+    endif()
   else()
-    if(NOT USE_CUDA)
-      message(WARNING "CUDA components detected, but USE_CUDA set to OFF. \nNOT building CUDA version of ABACUS.")
+    if(NOT USE_CUDA AND NOT USE_CUSOLVER_LCAO)
+      message(WARNING "CUDA components detected, but both USE_CUDA and USE_CUSOLVER_LCAO set to OFF. \nNOT building CUDA version of ABACUS.")
+    elseif (USE_CUDA AND USE_CUSOLVER_LCAO)
+      message(FATAL_ERROR "USE_CUDA and USE_CUSOLVER_LCAO set, but now they not allowed to coexist.")
     endif()
   endif()
 else() # CUDA not found
-  if (USE_CUDA)
-    message(FATAL_ERROR "USE_CUDA set but no CUDA components found.")
+  if (USE_CUDA OR USE_CUSOLVER_LCAO)
+    message(FATAL_ERROR "USE_CUDA or USE_CUSOLVER_LCAO set but no CUDA components found.")
     set(USE_CUDA OFF)
+    set(USE_CUSOLVER_LCAO OFF)
   endif()
 endif()
-if(USE_CUDA)
+
+if(USE_CUDA OR USE_CUSOLVER_LCAO)
   set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_EXTENSIONS ON)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -92,10 +104,17 @@ if(USE_CUDA)
   60 # P100
   70 # V100
   75 # T4
+  80 # A100
   )
   include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-  add_compile_definitions(__CUDA)
+  if (USE_CUDA)
+    add_compile_definitions(__CUDA)
+  endif()
+  if (USE_CUSOLVER_LCAO)
+    add_compile_definitions(__CUSOLVER_LCAO)
+  endif()
 endif()
+
 
 # Warning: CMake add support to HIP in version 3.21. This is rather a new version.
 # Use cmake with AMD-ROCm: https://rocmdocs.amd.com/en/latest/Installation_Guide/Using-CMake-with-AMD-ROCm.html
@@ -167,13 +186,14 @@ else()
     message(WARNING "Cannot find the correct library for Fortran.")
   endif()
 endif()
-target_link_libraries(${ABACUS_BIN_NAME} ${math_libs})
 
 if(ENABLE_DEEPKS)
   set(CMAKE_CXX_STANDARD 14)
   find_package(Torch REQUIRED)
   include_directories(${TORCH_INCLUDE_DIRS})
-  target_link_libraries(${ABACUS_BIN_NAME} ${TORCH_LIBRARIES})
+  target_link_libraries(${ABACUS_BIN_NAME} deepks)
+  list(APPEND math_libs ${TORCH_LIBRARIES})
+
   add_compile_options(${TORCH_CXX_FLAGS})
 
   find_path(libnpy_SOURCE_DIR
@@ -191,6 +211,8 @@ if(ENABLE_DEEPKS)
   include_directories(${libnpy_SOURCE_DIR}/include)
   add_compile_definitions(__DEEPKS)
 endif()
+
+target_link_libraries(${ABACUS_BIN_NAME} ${math_libs})
 
 if(DEFINED Libxc_DIR)
   set(ENABLE_LIBXC ON)
@@ -225,8 +247,8 @@ IF (BUILD_TESTING)
   enable_testing()
   find_package(Threads)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  find_package(GTest)
-  if(NOT ${GTEST_FOUND})
+  find_package(GTest HINTS /usr/local/lib/ ${GTEST_DIR})
+  if(NOT ${GTest_FOUND})
     include(FetchContent)
     FetchContent_Declare(
       googletest
@@ -260,7 +282,7 @@ target_link_libraries(${ABACUS_BIN_NAME}
     cell
     symmetry
     md
-    symmetry
+    surchem
     neighbor
     orb
     io
@@ -272,6 +294,8 @@ target_link_libraries(${ABACUS_BIN_NAME}
     pw
     ri
     driver
+    xc
+    esolver
     -lm
 )
 

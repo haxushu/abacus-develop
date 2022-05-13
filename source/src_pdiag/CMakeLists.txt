@@ -1,10 +1,15 @@
 add_subdirectory(MRRR)
 
+if(USE_CUSOLVER_LCAO)
+    list(APPEND objects
+        diag_cusolver.cu
+    )
+endif()
+
 add_library(
     pdiag
     OBJECT
     pdgseps.cpp
-    pdiag_basic.cpp
     pdiag_common.cpp
     pdiag_double.cpp
     pdst2g.cpp
@@ -22,4 +27,9 @@ add_library(
     pzsteiz.cpp
     pzt2s.cpp
     diag_scalapack_gvx.cpp
+    ${objects}
 )
+
+IF (BUILD_TESTING)
+  add_subdirectory(test)
+endif()

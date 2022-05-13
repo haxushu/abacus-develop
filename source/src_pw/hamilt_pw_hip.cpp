@@ -116,7 +116,6 @@ Hamilt_PW::Hamilt_PW()
 	// hpsi = new complex<double>[1];
 	// spsi = new complex<double>[1];
 	// GR_index = new int[1];
-	// Bec = new complex<double>[1];
 #ifdef __ROCM
 	hipMalloc((void **)&GR_index_d, sizeof(int));
 	CHECK_CUBLAS(hipblasCreate(&hpw_handle));
@@ -128,7 +127,6 @@ Hamilt_PW::~Hamilt_PW()
 	// delete[] hpsi;
 	// delete[] spsi;
 	delete[] GR_index;
-	// delete[] Bec;
 #ifdef __ROCM
 	CHECK_CUDA(hipFree(GR_index_d));
 	if (hpw_handle)
@@ -149,7 +147,6 @@ void Hamilt_PW::allocate(const int &npwx, const int &npol, const int &nkb, const
 	// delete[] hpsi;
 	// delete[] spsi;
 	// delete[] GR_index;
-	// delete[] Bec;
 
 	delete[] GR_index;
 	GR_index = new int[npwx];
@@ -318,17 +315,17 @@ void Hamilt_PW::diagH_subspace(const int ik,
 				}
 			}
 		};
-		if (5 == GlobalC::xcf.iexch_now && 0 == GlobalC::xcf.igcx_now) // HF
+		if(XC_Functional::get_func_type()==4)
 		{
-			add_Hexx(1);
-		}
-		else if (6 == GlobalC::xcf.iexch_now && 8 == GlobalC::xcf.igcx_now) // PBE0
-		{
-			add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
-		}
-		else if (9 == GlobalC::xcf.iexch_now && 12 == GlobalC::xcf.igcx_now) // HSE
-		{
-			add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
+			if ( Exx_Global::Hybrid_Type::HF   == GlobalC::exx_lcao.info.hybrid_type ) // HF
+			{
+				add_Hexx(1);
+			}
+			else if (Exx_Global::Hybrid_Type::PBE0 == GlobalC::exx_lcao.info.hybrid_type || 
+					Exx_Global::Hybrid_Type::HSE  == GlobalC::exx_lcao.info.hybrid_type) // PBE0 or HSE
+			{
+				add_Hexx(GlobalC::exx_global.info.hybrid_alpha);
+			}
 		}
 	}
 #endif
@@ -1578,7 +1575,7 @@ void Hamilt_PW::h_psi(const std::complex<double> *psi_in, std::complex<double> *
 	// (4) the metaGGA part
 	//------------------------------------
 	// timer::tick("Hamilt_PW","meta");
-	if (GlobalV::DFT_META)
+	if (XC_Functional::get_func_type() == 3)
 	{
 		tmhpsi = hpsi;
 		tmpsi_in = psi_in;
